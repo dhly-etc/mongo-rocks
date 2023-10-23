@@ -70,14 +70,18 @@ env.Library(
     + dynamic_syslibdeps)
 
 env.Library(
-    target='storage_rocks', source=[
+    target='storage_rocks',
+    source=[
         'src/rocks_init.cpp',
         'src/rocks_options_init.cpp',
         'src/rocks_record_store_mongod.cpp',
         'src/rocks_server_status.cpp',
-    ], LIBDEPS_PRIVATE=[
+    ],
+    LIBDEPS_PRIVATE=[
         'storage_rocks_base',
-    ], PROGDEPS_DEPENDENTS=['$BUILD_DIR/mongo/mongod'])
+    ],
+    PROGDEPS_DEPENDENTS=['$BUILD_DIR/mongo/db/mongod'],
+)
 
 env.Library(target='storage_rocks_mock', source=[
     'src/rocks_record_store_mock.cpp',
