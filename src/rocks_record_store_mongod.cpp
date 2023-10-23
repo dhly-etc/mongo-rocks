@@ -27,8 +27,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
-
 #include <mutex>
 #include <set>
 
@@ -51,6 +49,8 @@
 #include "rocks_engine.h"
 #include "rocks_record_store.h"
 #include "rocks_recovery_unit.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace mongo {
 

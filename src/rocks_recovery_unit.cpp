@@ -26,8 +26,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
-
 #include "rocks_recovery_unit.h"
 
 #include <rocksdb/comparator.h>
@@ -40,7 +38,7 @@
 #include <rocksdb/write_batch.h>
 
 #include "mongo/base/checked_cast.h"
-#include "mongo/db/concurrency/write_conflict_exception.h"
+#include "mongo/db/concurrency/exception_util.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/server_options.h"
@@ -53,6 +51,8 @@
 #include "rocks_oplog_manager.h"
 #include "rocks_snapshot_manager.h"
 #include "rocks_util.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace mongo {
     namespace {

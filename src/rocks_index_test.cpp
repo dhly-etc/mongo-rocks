@@ -40,7 +40,6 @@
 #include "mongo/db/concurrency/exception_util.h"
 #include "mongo/db/storage/sorted_data_interface_test_harness.h"
 #include "mongo/platform/basic.h"
-#include "mongo/stdx/memory.h"
 #include "mongo/unittest/temp_dir.h"
 #include "mongo/unittest/unittest.h"
 #include "rocks_engine.h"

@@ -25,7 +25,6 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include <rocksdb/cache.h>
 #include <rocksdb/convenience.h>
@@ -37,12 +36,13 @@
 
 #include "mongo/db/json.h"
 #include "mongo/db/modules/rocks/src/rocks_parameters_gen.h"
-#include "mongo/logger/parse_log_component_settings.h"
 #include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
 #include "mongo/util/str.h"
 #include "rocks_global_options.h"
 #include "rocks_util.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace mongo {
 

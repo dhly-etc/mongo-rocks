@@ -26,8 +26,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
-
 #include "rocks_counter_manager.h"
 
 #include <atomic>
@@ -45,6 +43,8 @@
 #include "mongo/platform/mutex.h"
 #include "mongo/util/assert_util.h"
 #include "rocks_util.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace mongo {
 

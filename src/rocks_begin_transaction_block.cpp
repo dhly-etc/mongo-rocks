@@ -27,8 +27,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
-
 #include "rocks_begin_transaction_block.h"
 
 #include <cstdio>
@@ -36,6 +34,8 @@
 #include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
 #include "rocks_util.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace mongo {
     RocksBeginTxnBlock::RocksBeginTxnBlock(rocksdb::TOTransactionDB* db,

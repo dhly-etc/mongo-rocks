@@ -5,13 +5,13 @@
 
 #ifndef ROCKSDB_LITE
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
-
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db_impl.h"
 
 #include "mongo/bson/timestamp.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_prepare_iterator.h"
 #include "mongo/logv2/log.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace rocksdb {
 
@@ -247,8 +247,8 @@ namespace rocksdb {
             // step3: invoke rocksdb::OpenAndTrimHistory
             // step4: close db
             if (s.ok()) {
-                LOG(0) << "##### TOTDB recover to stableTs "
-                       << rocksdb::Slice(trim_ts).ToString(true);
+                LOGV2_DEBUG(0, 0, "TOTDB recover to stableTs",
+                            "ts"_attr = rocksdb::Slice(trim_ts).ToString(true));
                 std::vector<ColumnFamilyHandle*> tmp_cfhs;
                 DB* tmp_db = nullptr;
                 s = DB::OpenAndTrimHistory(db_options, dbname, trim_cfds, &tmp_cfhs, &tmp_db,
@@ -265,7 +265,7 @@ namespace rocksdb {
             }
         }
 
-        LOG(0) << "##### TOTDB open on normal mode #####";
+        LOGV2_DEBUG(0, 0, "TOTDB open on normal mode");
         DB* db = nullptr;
         s = DB::Open(db_options, dbname, open_cfds, handles, &db);
         if (s.ok()) {
@@ -274,7 +274,7 @@ namespace rocksdb {
             *dbptr = v;
         }
 
-        LOG(0) << "##### TOTDB open success #####";
+        LOGV2_DEBUG(0, 0, "TOTDB open success");
         return s;
     }
 
@@ -301,8 +301,9 @@ namespace rocksdb {
         if (iter != stripe->uncommitted_keys_map_.end()) {
             // Check whether the key is modified by the same txn
             if (iter->second != txn_id) {
-                LOG(2) << "TOTDB WriteConflict another txn id " << iter->second
-                       << " is modifying key " << rocksdb::Slice(key.second).ToString(true);
+                LOGV2_DEBUG(0, 2, "TOTDB WriteConflict another txn is modifying key",
+                            "txnId"_attr = iter->second,
+                            "key"_attr = rocksdb::Slice(key.second).ToString(true));
                 return Status::Busy();
             } else {
                 return Status::OK();
@@ -311,8 +312,9 @@ namespace rocksdb {
         size_t delta_size = TxnKeySize(key) + sizeof(txn_id);
         auto addedSize = mem_usage->load(std::memory_order_relaxed) + delta_size;
         if (addedSize > max_mem_usage) {
-            LOG(2) << "TOTDB WriteConflict mem usage " << addedSize << " is greater than limit "
-                   << max_mem_usage;
+            LOGV2_DEBUG(0, 2, "TOTDB WriteConflict mem usage is greater than limit ",
+                        "usage"_attr = addedSize, "limit"_attr =);
+            max_mem_usage;
             return Status::Busy();
         }
         mem_usage->fetch_add(delta_size, std::memory_order_relaxed);
@@ -360,14 +362,14 @@ namespace rocksdb {
             // const RocksTimeStamp& prepare_ts = std::get<1>(iter->second);
             const RocksTimeStamp& committed_ts = std::get<2>(iter->second);
             if (committed_txn_id > txn_id) {
-                LOG(2) << "TOTDB WriteConflict a committed txn commit_id " << committed_txn_id
-                       << " greater than my txnid " << txn_id;
+                LOGV2_DEBUG(0, 2, "TOTDB WriteConflict a committed txn greater than mine",
+                            "committed"_attr = committed_txn_id, "mine"_attr = txn_id);
                 return Status::Busy("SI conflict");
             }
             // Find the latest committed txn for this key and its commit ts
             if (committed_ts > timestamp) {
-                LOG(2) << "TOTDB WriteConflict a committed txn commit_ts " << committed_ts
-                       << " greater than my read_ts " << timestamp;
+                LOGV2_DEBUG(0, 2, "TOTDB WriteConflict a committed txn greater than my read_ts",
+                            "committed"_attr = committed_ts, "read_ts"_attr = timestamp);
                 return Status::Busy("timestamp conflict");
             }
         }
@@ -410,8 +412,8 @@ namespace rocksdb {
             AddToActiveTxns(newActiveTxnNode);
         }
 
-        LOG(2) << "TOTDB begin a txn id " << newActiveTxnNode->txn_id_ << " snapshot "
-               << newActiveTxnNode->txn_snapshot->GetSequenceNumber();
+        LOGV2_DEBUG(0, 2, "TOTDB begin a txn", "txn_id"_attr = newActiveTxnNode->txn_id_,
+                    "snapshot"_attr = newActiveTxnNode->txn_snapshot->GetSequenceNumber());
         return newTransaction;
     }
 
@@ -426,8 +428,8 @@ namespace rocksdb {
         // Check whether the commit ts of latest committed txn for key is less than my read ts
         Status s = committed_keys_.CheckKeyInLock(key, txn_id, readts, stripe_num);
         if (!s.ok()) {
-            LOG(2) << "TOTDB txn id " << txn_id << " key "
-                   << rocksdb::Slice(key.second).ToString(true) << " conflict ck";
+            LOGV2_DEBUG(0, 2, "TOTDB txn conflict ck", "txn_id"_attr = txn_id,
+                        "key"_attr = rocksdb::Slice(key.second).ToString(true));
             return s;
         }
 
@@ -437,8 +439,8 @@ namespace rocksdb {
             key, txn_id, stripe_num, max_conflict_bytes_.load(std::memory_order_relaxed),
             &current_conflict_bytes_);
         if (!s.ok()) {
-            LOG(2) << "TOTDB txn id " << txn_id << " key "
-                   << rocksdb::Slice(key.second).ToString(true) << " conflict uk";
+            LOGV2_DEBUG(0, 2, "TOTDB txn conflict uk", "txn_id"_attr = txn_id,
+                        "key"_attr = rocksdb::Slice(key.second).ToString(true));
             return s;
         }
 
@@ -746,8 +748,9 @@ namespace rocksdb {
             read_q_walk_len_sum_.fetch_add(read_q_.size(), std::memory_order_relaxed);
             read_q_walk_times_.fetch_add(walk_cnt, std::memory_order_relaxed);
             if (it->second->read_ts_ >= timestamp) {
-                LOG(2) << op << " timestamp: " << timestamp
-                       << " must be greater than the latest active readts " << it->second->read_ts_;
+                LOGV2_DEBUG(0, 2, "op timestamp  must be greater than the latest active readts",
+                            "op"_attr = op, "timestamp"_attr = timestamp,
+                            "active readts"_attr = it->second->read_ts_);
                 return Status::InvalidArgument(
                     "commit/prepare ts must be greater than latest readts");
             } else {
@@ -787,8 +790,8 @@ namespace rocksdb {
             if (core->timestamp_round_prepared_) {
                 core->prepare_ts_ = tmp_oldest;
                 core->prepare_ts_set_ = true;
-                LOG(2) << "TOTDB round txn " << core->txn_id_ << " prepare_ts " << timestamp
-                       << " to oldest " << tmp_oldest;
+                LOGV2_DEBUG(0, 2, "TOTDB round txn to oldest", "txn_id"_attr = core->txn_id_,
+                            "prepare_ts"_attr = timestamp, "oldest"_attr = tmp_oldest);
                 return Status::OK();
             } else {
                 return Status::InvalidArgument("prepareTs should not be less than oldest ts");
@@ -813,8 +816,8 @@ namespace rocksdb {
         RocksTimeStamp prev_durable_timestamp = 0;
         bool update_durable_ts = false;
         bool need_clean = false;
-        LOG(2) << "TOTDB start to commit txn id " << core->txn_id_ << " commit ts "
-               << core->commit_ts_;
+        LOGV2_DEBUG(0, 2, "TOTDB start to commit txn", "txn_id"_attr = core->txn_id_,
+                    "commit_ts"_attr = core->commit_ts_);
         // Update Active Txns
         auto state = core->state_.load(std::memory_order_relaxed);
         (void)state;
@@ -914,15 +917,15 @@ namespace rocksdb {
             }
         }
 
-        LOG(2) << "TOTDB end commit txn id " << core->txn_id_ << " cid " << core->commit_txn_id_
-               << " commit ts " << core->commit_ts_;
+        LOGV2_DEBUG(0, 2, "TOTDB end commit txn", "txn_id"_attr = core->txn_id_,
+                    "cid"_attr = core->commit_txn_id_, "commit_ts"_attr = core->commit_ts_);
         // Clean committed keys
         if (need_clean) {
             // Clean committed keys async
             // Clean keys whose commited txnid <= max_to_clean_txn_id
             // and committed ts < max_to_clean_ts
-            LOG(2) << "TOTDB going to clean txnid " << max_to_clean_txn_id << " ts "
-                   << max_to_clean_ts;
+            LOGV2_DEBUG(0, 2, "TOTDB going to clean txnid " << max_to_clean_txn_id << " ts ");
+            << max_to_clean_ts;
             clean_job_.SetCleanInfo(max_to_clean_txn_id, max_to_clean_ts);
         }
 
@@ -939,7 +942,7 @@ namespace rocksdb {
     Status TOTransactionDBImpl::RollbackTransaction(const std::shared_ptr<ATN>& core,
                                                     const std::set<TxnKey>& written_keys,
                                                     const std::set<TxnKey>& get_for_updates) {
-        LOG(2) << "TOTDB start to rollback txn id " << core->txn_id_;
+        LOGV2_DEBUG(0, 2, "TOTDB start to rollback txn", "txn_id"_attr = core->txn_id_;
         auto state = core->state_.load(std::memory_order_relaxed);
         invariant(state == TOTransaction::kStarted || state == TOTransaction::kPrepared);
         // clean prepare_heap_ before set state to keep the invariant that no
@@ -996,11 +999,11 @@ namespace rocksdb {
             stripe_keys_iter++;
         }
 
-        LOG(2) << "TOTDB end rollback txn id " << core->txn_id_;
+        LOGV2_DEBUG(0, 2, "TOTDB end rollback txn", "txn_id"_attr = core->txn_id_);
 
         if (need_clean) {
-            LOG(2) << "TOTDB going to clean txnid " << max_to_clean_txn_id << "ts "
-                   << max_to_clean_ts;
+            LOGV2_DEBUG(0, 2, "TOTDB going to clean txn", "txn_id"_attr = max_to_clean_txn_id,
+                        "ts"_attr = max_to_clean_ts);
             clean_job_.SetCleanInfo(max_to_clean_txn_id, max_to_clean_ts);
         }
 
@@ -1023,8 +1026,7 @@ namespace rocksdb {
             // kCommitted-timestamp, there is no paralllel running txns that will also
             // change it.
             if (force) {
-                LOG(2) << "kCommittedTs force set from "
-                       << (has_commit_ts_.load() ? committed_max_ts_.load() : 0) << " to " << ts;
+                LOGV2_DEBUG(0, 2, "kCommittedTs force set", "from"_attr = (has_commit_ts_.load() ? committed_max_ts_.load() : 0) , "to"_attr = ts;
             }
             std::shared_lock<std::shared_mutex> rl(ts_meta_mutex_);
             if ((oldest_ts_ != nullptr && *oldest_ts_ > ts) && !force) {
@@ -1042,15 +1044,15 @@ namespace rocksdb {
             {
                 std::unique_lock<std::shared_mutex> wl(ts_meta_mutex_);
                 if ((oldest_ts_ != nullptr && *oldest_ts_ > ts) && !force) {
-                    LOG(2) << "oldestTs can not travel back, oldest_ts from " << *oldest_ts_
-                           << " to " << ts << " keep oldest_ts " << *oldest_ts_;
+                    LOGV2_DEBUG(0, 2, "oldestTs can not travel back, keep oldest_ts",
+                                "oldest_ts"_attr = *oldest_ts_, "target"_attr = ts);
                     return Status::OK();
                 }
                 original = (oldest_ts_ == nullptr) ? 0 : *oldest_ts_;
                 oldest_ts_.reset(new RocksTimeStamp(ts));
             }
             if (force) {
-                LOG(2) << "kOldestTs force set from " << original << " to " << ts;
+                LOGV2_DEBUG(0, 2, "kOldestTs force set", "from"_attr = original, "to"_attr = ts);
             }
             auto pin_ts = ts;
             {
@@ -1077,8 +1079,8 @@ namespace rocksdb {
                     return s;
                 }
             }
-            LOG(2) << "TOTDB set oldest ts type " << static_cast<int>(ts_type) << " value "
-                   << pin_ts;
+            LOGV2_DEBUG(0, 2, "TOTDB set oldest ts", "type"_attr = static_cast<int>(ts_type),
+                        "value"_attr = pin_ts);
             return Status::OK();
         }
 
@@ -1095,7 +1097,8 @@ namespace rocksdb {
             if (!s.ok()) {
                 return s;
             }
-            LOG(2) << "TOTDB set stable ts type " << static_cast<int>(ts_type) << " value " << ts;
+            LOGV2_DEBUG(0, 2, "TOTDB set stable ts", "type"_attr = static_cast<int>(ts_type),
+                        "value"_attr = ts);
             return Status::OK();
         }
 
@@ -1142,8 +1145,8 @@ namespace rocksdb {
             invariant(ts_holder.size() == sizeof(RocksTimeStamp));
             *timestamp = Decoder(ts_holder.data(), ts_holder.size()).get64();
             oldest_ts_.reset(new RocksTimeStamp(*timestamp));
-            LOG(2) << "TOTDB query TS type " << static_cast<int>(ts_type) << " value "
-                   << *timestamp;
+            LOGV2_DEBUG(0, 2, "TOTDB query TS", "type"_attr = static_cast<int>(ts_type),
+                        "value"_attr = *timestamp);
             return Status::OK();
         }
         if (ts_type == kStable) {
@@ -1161,8 +1164,8 @@ namespace rocksdb {
             }
             invariant(ts_holder.size() == sizeof(RocksTimeStamp));
             *timestamp = Decoder(ts_holder.data(), ts_holder.size()).get64();
-            LOG(2) << "TOTDB query stable TS type " << static_cast<int>(ts_type) << " value "
-                   << *timestamp;
+            LOGV2_DEBUG(0, 2, "TOTDB query stable TS", "type"_attr = static_cast<int>(ts_type),
+                        "value"_attr = *timestamp);
             return Status::OK();
         }
         return Status::InvalidArgument("invalid ts_type");

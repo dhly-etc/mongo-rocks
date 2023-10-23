@@ -26,8 +26,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
-
 #include "rocks_compaction_scheduler.h"
 
 #include <rocksdb/compaction_filter.h>
@@ -53,6 +51,8 @@
 #include "mongo/util/fail_point.h"
 #include "rocks_record_store.h"
 #include "rocks_util.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace mongo {
     namespace {

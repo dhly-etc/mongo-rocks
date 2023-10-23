@@ -27,8 +27,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kControl
-
 #include "mongo_rate_limiter_checker.h"
 
 #ifdef __linux__
@@ -41,6 +39,8 @@
 #include "mongo/util/exit.h"
 #include "mongo/util/time_support.h"
 #include "rocks_util.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kControl
 
 namespace mongo {
 

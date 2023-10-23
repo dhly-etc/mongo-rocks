@@ -26,8 +26,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
-
 #include "rocks_snapshot_manager.h"
 
 #include <rocksdb/db.h>
@@ -38,6 +36,8 @@
 #include "mongo/platform/basic.h"
 #include "rocks_begin_transaction_block.h"
 #include "rocks_recovery_unit.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace mongo {
     void RocksSnapshotManager::setCommittedSnapshot(const Timestamp& ts) {

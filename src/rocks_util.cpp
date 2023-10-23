@@ -26,8 +26,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
-
 #include "rocks_util.h"
 
 #include <rocksdb/status.h>
@@ -44,6 +42,8 @@
 #include "mongo/db/concurrency/exception_util.h"
 #include "mongo/logv2/log.h"
 #include "mongo/platform/endian.h"
+
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 namespace mongo {
     std::string encodePrefix(uint32_t prefix) {

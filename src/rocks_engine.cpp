@@ -65,7 +65,6 @@
 #include "mongo/db/storage/journal_listener.h"
 #include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
-#include "mongo/stdx/memory.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/idle_thread_block.h"
 #include "mongo/util/concurrency/ticketholder.h"

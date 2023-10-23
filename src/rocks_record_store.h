@@ -42,7 +42,7 @@
 #include "mongo/platform/atomic_word.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/stdx/condition_variable.h"
-#include "mongo/util/fail_point_service.h"
+#include "mongo/util/fail_point.h"
 #include "mongo/util/timer.h"
 #include "mongo_rate_limiter_checker.h"
 
@@ -51,17 +51,16 @@
  * conflict exception if the RocksWriteConflictException failpoint is enabled. This is only checked
  * on cursor methods that make modifications.
  */
-#define ROCKS_OP_CHECK(x)                                \
-    (((MONGO_FAIL_POINT(RocksWriteConflictException)))   \
-         ? (rocksdb::Status::Busy("failpoint simulate")) \
-         : (x))
+#define ROCKS_OP_CHECK(x)                                                                         \
+    (((RocksWriteConflictException.shouldFail())) ? (rocksdb::Status::Busy("failpoint simulate")) \
+                                                  : (x))
 
 /**
  * Identical to ROCKS_OP_CHECK except this is checked on cursor seeks/advancement.
  */
-#define ROCKS_READ_CHECK(x)                                    \
-    (((MONGO_FAIL_POINT(RocksWriteConflictExceptionForReads))) \
-         ? (rocksdb::Status::Busy("failpoint simulate"))       \
+#define ROCKS_READ_CHECK(x)                               \
+    (((RocksWriteConflictExceptionForReads.shouldFail())) \
+         ? (rocksdb::Status::Busy("failpoint simulate"))  \
          : (x))
 
 namespace rocksdb {
