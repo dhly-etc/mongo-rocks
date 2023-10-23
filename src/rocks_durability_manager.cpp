@@ -41,7 +41,7 @@ namespace mongo {
           _durable(durable),
           _defaultCf(defaultCf),
           _oplogCf(oplogCf),
-          _journalListener(&NoOpJournalListener::instance) {}
+          _journalListener(nullptr) {}
 
     void RocksDurabilityManager::setJournalListener(JournalListener* jl) {
         stdx::unique_lock<Latch> lk(_journalListenerMutex);
@@ -62,13 +62,15 @@ namespace mongo {
         _lastSyncTime.store(current + 1);
 
         stdx::unique_lock<Latch> jlk(_journalListenerMutex);
-        JournalListener::Token token = _journalListener->getToken();
-        if (!_durable || forceFlush) {
-            invariantRocksOK(_db->Flush(rocksdb::FlushOptions(), {_defaultCf, _oplogCf}));
-        } else {
-            invariantRocksOK(_db->SyncWAL());
+        if (_journalListener) {
+            JournalListener::Token token = _journalListener->getToken();
+            if (!_durable || forceFlush) {
+                invariantRocksOK(_db->Flush(rocksdb::FlushOptions(), {_defaultCf, _oplogCf}));
+            } else {
+                invariantRocksOK(_db->SyncWAL());
+            }
+            _journalListener->onDurable(token);
         }
-        _journalListener->onDurable(token);
     }
 
     void RocksDurabilityManager::waitUntilPreparedUnitOfWorkCommitsOrAborts(
