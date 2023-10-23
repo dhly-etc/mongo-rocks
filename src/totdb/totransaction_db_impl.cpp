@@ -7,11 +7,14 @@
 
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db_impl.h"
 
+#include "mongo/base/data_type_endian.h"
 #include "mongo/bson/timestamp.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_prepare_iterator.h"
 #include "mongo/logv2/log.h"
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::logv2::LogComponent::kStorage
+
+using namespace mongo;
 
 namespace rocksdb {
 
@@ -226,8 +229,7 @@ namespace rocksdb {
                 }
 
                 char read_ts_buffer_[sizeof(RocksTimeStamp)];
-                Encoder(read_ts_buffer_, sizeof(RocksTimeStamp))
-                    .put64(mongo::Timestamp::max().asULL());
+                DataView(read_ts_buffer_).write<LittleEndian<uint64_t>>(Timestamp::max().asULL());
                 auto read_opt = rocksdb::ReadOptions();
                 Slice readTs = rocksdb::Slice(read_ts_buffer_, sizeof(read_ts_buffer_));
                 read_opt.timestamp = &readTs;
@@ -313,8 +315,7 @@ namespace rocksdb {
         auto addedSize = mem_usage->load(std::memory_order_relaxed) + delta_size;
         if (addedSize > max_mem_usage) {
             LOGV2_DEBUG(0, 2, "TOTDB WriteConflict mem usage is greater than limit ",
-                        "usage"_attr = addedSize, "limit"_attr =);
-            max_mem_usage;
+                        "usage"_attr = addedSize, "limit"_attr = max_mem_usage);
             return Status::Busy();
         }
         mem_usage->fetch_add(delta_size, std::memory_order_relaxed);
@@ -924,8 +925,8 @@ namespace rocksdb {
             // Clean committed keys async
             // Clean keys whose commited txnid <= max_to_clean_txn_id
             // and committed ts < max_to_clean_ts
-            LOGV2_DEBUG(0, 2, "TOTDB going to clean txnid " << max_to_clean_txn_id << " ts ");
-            << max_to_clean_ts;
+            LOGV2_DEBUG(0, 2, "TOTDB going to clean txn", "txn_id"_attr = max_to_clean_txn_id,
+                        "ts"_attr = max_to_clean_ts);
             clean_job_.SetCleanInfo(max_to_clean_txn_id, max_to_clean_ts);
         }
 
@@ -942,7 +943,7 @@ namespace rocksdb {
     Status TOTransactionDBImpl::RollbackTransaction(const std::shared_ptr<ATN>& core,
                                                     const std::set<TxnKey>& written_keys,
                                                     const std::set<TxnKey>& get_for_updates) {
-        LOGV2_DEBUG(0, 2, "TOTDB start to rollback txn", "txn_id"_attr = core->txn_id_;
+        LOGV2_DEBUG(0, 2, "TOTDB start to rollback txn", "txn_id"_attr = core->txn_id_);
         auto state = core->state_.load(std::memory_order_relaxed);
         invariant(state == TOTransaction::kStarted || state == TOTransaction::kPrepared);
         // clean prepare_heap_ before set state to keep the invariant that no
@@ -1026,7 +1027,9 @@ namespace rocksdb {
             // kCommitted-timestamp, there is no paralllel running txns that will also
             // change it.
             if (force) {
-                LOGV2_DEBUG(0, 2, "kCommittedTs force set", "from"_attr = (has_commit_ts_.load() ? committed_max_ts_.load() : 0) , "to"_attr = ts;
+                LOGV2_DEBUG(0, 2, "kCommittedTs force set",
+                            "from"_attr = (has_commit_ts_.load() ? committed_max_ts_.load() : 0),
+                            "to"_attr = ts);
             }
             std::shared_lock<std::shared_mutex> rl(ts_meta_mutex_);
             if ((oldest_ts_ != nullptr && *oldest_ts_ > ts) && !force) {
@@ -1072,7 +1075,7 @@ namespace rocksdb {
             }
             {
                 char buf[sizeof(RocksTimeStamp)];
-                Encoder(buf, sizeof(pin_ts)).put64(pin_ts);
+                DataView(buf).write<LittleEndian<uint64_t>>(pin_ts);
                 auto s = GetRootDB()->IncreaseFullHistoryTsLow(GetRootDB()->DefaultColumnFamily(),
                                                                std::string(buf, sizeof(buf)));
                 if (!s.ok()) {
@@ -1087,8 +1090,8 @@ namespace rocksdb {
         if (ts_type == kStable) {
             char val_buf[sizeof(RocksTimeStamp)];
             char ts_buf[sizeof(RocksTimeStamp)];
-            Encoder(val_buf, sizeof(ts)).put64(ts);
-            Encoder(ts_buf, sizeof(ts)).put64(0);
+            DataView(val_buf).write<LittleEndian<uint64_t>>(ts);
+            DataView(ts_buf).write<LittleEndian<uint64_t>>(0);
             auto write_ops = rocksdb::WriteOptions();
             write_ops.sync = true;
             auto s = Put(write_ops, DefaultColumnFamily(), stable_ts_key_,
@@ -1143,7 +1146,7 @@ namespace rocksdb {
                 return s;
             }
             invariant(ts_holder.size() == sizeof(RocksTimeStamp));
-            *timestamp = Decoder(ts_holder.data(), ts_holder.size()).get64();
+            *timestamp = ConstDataView(ts_holder.data()).read<LittleEndian<uint64_t>>();
             oldest_ts_.reset(new RocksTimeStamp(*timestamp));
             LOGV2_DEBUG(0, 2, "TOTDB query TS", "type"_attr = static_cast<int>(ts_type),
                         "value"_attr = *timestamp);
@@ -1153,7 +1156,7 @@ namespace rocksdb {
             std::string ts_holder;
 
             char read_ts_buffer_[sizeof(RocksTimeStamp)];
-            Encoder(read_ts_buffer_, sizeof(RocksTimeStamp)).put64(mongo::Timestamp::max().asULL());
+            DataView(read_ts_buffer_).write<LittleEndian<uint64_t>>(Timestamp::max().asULL());
             auto read_opt = rocksdb::ReadOptions();
             Slice readTs = rocksdb::Slice(read_ts_buffer_, sizeof(read_ts_buffer_));
             read_opt.timestamp = &readTs;
@@ -1163,7 +1166,7 @@ namespace rocksdb {
                 return s;
             }
             invariant(ts_holder.size() == sizeof(RocksTimeStamp));
-            *timestamp = Decoder(ts_holder.data(), ts_holder.size()).get64();
+            *timestamp = ConstDataView(ts_holder.data()).read<LittleEndian<uint64_t>>();
             LOGV2_DEBUG(0, 2, "TOTDB query stable TS", "type"_attr = static_cast<int>(ts_type),
                         "value"_attr = *timestamp);
             return Status::OK();
@@ -1284,8 +1287,8 @@ namespace rocksdb {
         invariant(ts1.data() && ts2.data());
         invariant(ts1.size() == sizeof(RocksTimeStamp));
         invariant(ts2.size() == sizeof(RocksTimeStamp));
-        uint64_t ts1_data = Decoder(ts1.data(), ts1.size()).get64();
-        uint64_t ts2_data = Decoder(ts2.data(), ts2.size()).get64();
+        uint64_t ts1_data = ConstDataView(ts1.data()).read<LittleEndian<uint64_t>>();
+        uint64_t ts2_data = ConstDataView(ts2.data()).read<LittleEndian<uint64_t>>();
 
         int ret = 0;
         if (ts1_data < ts2_data) {
