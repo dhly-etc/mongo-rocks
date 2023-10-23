@@ -75,7 +75,7 @@ namespace mongo {
         }
 
         if (status.IsBusy()) {
-            throw WriteConflictException();
+            throw WriteConflictException(Status{ErrorCodes::WriteConflict, ""});
         }
 
         if (status.IsCorruption() || status.IsInvalidArgument()) {
@@ -89,11 +89,11 @@ namespace mongo {
         char buffer[8192];
         int len = snprintf(buffer, sizeof(buffer), "[RocksDB]:");
         if (0 > len) {
-            mongo::log() << "MongoRocksLogger::Logv return NEGATIVE value.";
+            LOGV2(0, "MongoRocksLogger::Logv return NEGATIVE value.");
             return;
         }
         vsnprintf(buffer + len, sizeof(buffer) - len, format, ap);
-        log() << buffer;
+        LOGV2(0, buffer);
     }
 
 }  // namespace mongo
