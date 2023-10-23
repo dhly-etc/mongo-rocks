@@ -5,11 +5,11 @@
 
 #ifndef ROCKSDB_LITE
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 #include "mongo/db/modules/rocks/src/totdb/totransaction_impl.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db_impl.h"
-#include "mongo/util/log.h"
+#include "mongo/logv2/log.h"
 #include "mongo/util/stacktrace.h"
 #include "rocksdb/comparator.h"
 #include "rocksdb/db.h"

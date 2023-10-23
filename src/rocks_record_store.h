@@ -29,13 +29,13 @@
 
 #pragma once
 
+#include <rocksdb/options.h>
+
 #include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include <rocksdb/options.h>
 
 #include "mongo/db/storage/capped_callback.h"
 #include "mongo/db/storage/record_store.h"
@@ -102,7 +102,7 @@ namespace mongo {
                   tracksSizeAdjustments(true) {}
         };
         RocksRecordStore(RocksEngine* engine, rocksdb::ColumnFamilyHandle* cf,
-		         OperationContext* opCtx, Params params);
+                         OperationContext* opCtx, Params params);
 
         virtual ~RocksRecordStore();
 
@@ -224,8 +224,9 @@ namespace mongo {
         // shared_ptrs
         class Cursor : public SeekableRecordCursor {
         public:
-            Cursor(OperationContext* opCtx, rocksdb::TOTransactionDB* db, rocksdb::ColumnFamilyHandle* cf,
-                   std::string prefix, bool forward, bool isCapped, bool isOplog, RecordId startIterator);
+            Cursor(OperationContext* opCtx, rocksdb::TOTransactionDB* db,
+                   rocksdb::ColumnFamilyHandle* cf, std::string prefix, bool forward, bool isCapped,
+                   bool isOplog, RecordId startIterator);
 
             boost::optional<Record> next() final;
             boost::optional<Record> seekExact(const RecordId& id) final;
@@ -337,12 +338,12 @@ namespace mongo {
     };
 
     // Rocks failpoint to throw write conflict exceptions randomly
-    MONGO_FAIL_POINT_DECLARE(RocksWriteConflictException);
-    MONGO_FAIL_POINT_DECLARE(RocksWriteConflictExceptionForReads);
+    extern ::mongo::FailPoint RocksWriteConflictException;
+    extern ::mongo::FailPoint RocksWriteConflictExceptionForReads;
 
     // Prevents oplog writes from being considered durable on the primary. Once activated, new
     // writes will not be considered durable until deactivated. It is unspecified whether writes
     // that commit before activation will become visible while active.
-    MONGO_FAIL_POINT_DECLARE(RocksPausePrimaryOplogDurabilityLoop);
+    extern ::mongo::FailPoint RocksPausePrimaryOplogDurabilityLoop;
 
 }  // namespace mongo

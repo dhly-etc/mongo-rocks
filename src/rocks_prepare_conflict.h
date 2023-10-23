@@ -31,23 +31,23 @@
 
 #include <rocksdb/status.h>
 
+#include <functional>
+
 #include "mongo/db/curop.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
 #include "mongo/db/prepare_conflict_tracker.h"
-#include "mongo/util/fail_point_service.h"
+#include "mongo/util/fail_point.h"
 #include "rocks_recovery_unit.h"
-
-#include <functional>
 
 namespace mongo {
 
     // When set, returns simulates returning rocks prepare conflict status.
-    MONGO_FAIL_POINT_DECLARE(RocksPrepareConflictForReads);
+    extern ::mongo::FailPoint RocksPrepareConflictForReads;
 
     // When set, rocksdb::Busy is returned in place of retrying on ROCKS_PREPARE_CONFLICT errors.
-    MONGO_FAIL_POINT_DECLARE(RocksSkipPrepareConflictRetries);
+    extern ::mongo::FailPoint RocksSkipPrepareConflictRetries;
 
-    MONGO_FAIL_POINT_DECLARE(RocksPrintPrepareConflictLog);
+    extern ::mongo::FailPoint RocksPrintPrepareConflictLog;
 
     /**
      * Logs a message with the number of prepare conflict retry attempts.
