@@ -37,8 +37,8 @@
 namespace mongo {
 
     // static
-    bool RocksEngine::initRsOplogBackgroundThread(StringData ns) {
-        return NamespaceString::oplog(ns);
+    bool RocksEngine::initRsOplogBackgroundThread(const NamespaceString& nss) {
+        return nss.isOplog();
     }
 
 }  // namespace mongo

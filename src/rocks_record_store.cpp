@@ -114,7 +114,7 @@ namespace mongo {
           _engine(engine),
           _db(engine->getDB()),
           _cf(cf),
-          _oplogManager(NamespaceString::oplog(params.ns) ? engine->getOplogManager() : nullptr),
+          _oplogManager(params.nss.isOplog() ? engine->getOplogManager() : nullptr),
           _counterManager(engine->getCounterManager()),
           _compactionScheduler(engine->getCompactionScheduler()),
           _prefix(params.prefix),
@@ -123,16 +123,16 @@ namespace mongo {
           _cappedMaxSizeSlack(cappedMaxSizeSlackFromSize(params.cappedMaxSize)),
           _cappedMaxDocs(params.cappedMaxDocs),
           _cappedDeleteCheckCount(0),
-          _isOplog(NamespaceString::oplog(params.ns)),
+          _isOplog(params.nss.isOplog()),
           _ident(params.ident),
           _dataSizeKey(std::string("\0\0\0\0", 4) + "datasize-" + params.ident),
           _numRecordsKey(std::string("\0\0\0\0", 4) + "numrecords-" + params.ident),
-          _cappedOldestKey(NamespaceString::oplog(params.ns)
+          _cappedOldestKey(params.nss.isOplog()
                                ? std::string("\0\0\0\0", 4) + "cappedOldestKey-" + params.ident
                                : ""),
           _shuttingDown(false),
           _tracksSizeAdjustments(params.tracksSizeAdjustments) {
-        LOGV2_DEBUG(0, 2, "Opening collection", "namespace"_attr = params.ns,
+        LOGV2_DEBUG(0, 2, "Opening collection", "namespace"_attr = params.nss,
                     "prefix"_attr = rocksdb::Slice(_prefix).ToString(true));
 
         if (_isCapped) {
@@ -176,7 +176,7 @@ namespace mongo {
             }
         }
 
-        _hasBackgroundThread = RocksEngine::initRsOplogBackgroundThread(params.ns);
+        _hasBackgroundThread = RocksEngine::initRsOplogBackgroundThread(params.nss);
         invariant(_isOplog == (_oplogManager != nullptr));
         invariant(_isOplog == NamespaceString::oplog(_cf->GetName()));
         if (_isOplog) {

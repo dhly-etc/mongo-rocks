@@ -178,23 +178,24 @@ namespace mongo {
     }  // namespace
 
     // static
-    bool RocksEngine::initRsOplogBackgroundThread(StringData ns) {
-        if (!NamespaceString::oplog(ns)) {
+    bool RocksEngine::initRsOplogBackgroundThread(const NamespaceString& nss) {
+        if (!nss.isOplog()) {
             return false;
         }
 
         if (storageGlobalParams.repair || storageGlobalParams.readOnly) {
-            LOG(1) << "not starting RocksRecordStoreThread for " << ns
-                   << " because we are either in repair or read-only mode";
+            LOGV2_DEBUG(0, 1,
+                        "not starting RocksRecordStoreThread for because we are either in repair "
+                        "or read-only mode",
+                        "nss"_attr = nss);
             return false;
         }
 
         stdx::lock_guard<Latch> lock(_backgroundThreadMutex);
-        NamespaceString nss(ns);
         if (_backgroundThreadNamespaces.count(nss)) {
-            log() << "RocksRecordStoreThread " << ns << " already started";
+            log() << "RocksRecordStoreThread " << nss << " already started";
         } else {
-            log() << "Starting RocksRecordStoreThread " << ns;
+            log() << "Starting RocksRecordStoreThread " << nss;
             BackgroundJob* backgroundThread = new RocksRecordStoreThread(nss);
             backgroundThread->go();
             _backgroundThreadNamespaces.insert(nss);

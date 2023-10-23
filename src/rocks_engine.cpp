@@ -31,6 +31,7 @@
 
 #include "rocks_engine.h"
 
+#include <rocksdb/advanced_cache.h>
 #include <rocksdb/cache.h>
 #include <rocksdb/compaction_filter.h>
 #include <rocksdb/comparator.h>
@@ -61,7 +62,7 @@
 #include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/server_options.h"
 #include "mongo/db/server_recovery.h"
-#include "mongo/db/snapshot_window_options.h"
+#include "mongo/db/snapshot_window_options_gen.h"
 #include "mongo/db/storage/journal_listener.h"
 #include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
@@ -442,12 +443,6 @@ namespace mongo {
         return numEntriesMap;
     }
 
-    Status RocksEngine::okToRename(OperationContext* opCtx, StringData fromNS, StringData toNS,
-                                   StringData ident, const RecordStore* originalRecordStore) const {
-        _counterManager->sync();
-        return Status::OK();
-    }
-
     int64_t RocksEngine::getIdentSize(OperationContext* opCtx, StringData ident) {
         stdx::lock_guard<Latch> lk(_identObjectMapMutex);
 
@@ -465,11 +460,10 @@ namespace mongo {
         return 1;
     }
 
-    int RocksEngine::flushAllFiles(OperationContext* opCtx, bool sync) {
+    void RocksEngine::flushAllFiles(OperationContext* opCtx, bool) {
         LOGV2_DEBUG(0, 1, "RocksEngine::flushAllFiles");
         _counterManager->sync();
         _durabilityManager->waitUntilDurable(true);
-        return 1;
     }
 
     Status RocksEngine::beginBackup(OperationContext* opCtx) {
@@ -487,11 +481,21 @@ namespace mongo {
 
     RecoveryUnit* RocksEngine::newRecoveryUnit() { return new RocksRecoveryUnit(_durable, this); }
 
-    Status RocksEngine::createRecordStore(OperationContext* opCtx, StringData ns, StringData ident,
-                                          const CollectionOptions& options) {
+    Status RocksEngine::createRecordStore(OperationContext* opCtx, const NamespaceString& nss,
+                                          StringData ident, const CollectionOptions& options,
+                                          KeyFormat keyFormat) {
+        if (options.clusteredIndex) {
+            // A clustered collection requires both CollectionOptions.clusteredIndex and
+            // KeyFormat::String. For a clustered record store that is not associated with a
+            // clustered collection KeyFormat::String is sufficient.
+            uassert(6144100,
+                    "RecordStore with CollectionOptions.clusteredIndex requires KeyFormat::String",
+                    keyFormat == KeyFormat::String);
+        }
+
         BSONObjBuilder configBuilder;
         auto s = _createIdent(ident, &configBuilder);
-        if (s.isOK() && NamespaceString::oplog(ns)) {
+        if (s.isOK() && nss.isOplog()) {
             _oplogIdent = ident.toString();
             // oplog needs two prefixes, so we also reserve the next one
             uint64_t oplogTrackerPrefix = 0;
@@ -510,11 +514,12 @@ namespace mongo {
         return s;
     }
 
-    std::unique_ptr<RecordStore> RocksEngine::getRecordStore(OperationContext* opCtx, StringData ns,
+    std::unique_ptr<RecordStore> RocksEngine::getRecordStore(OperationContext* opCtx,
+                                                             const NamespaceString& nss,
                                                              StringData ident,
                                                              const CollectionOptions& options) {
         rocksdb::ColumnFamilyHandle* cf = nullptr;
-        if (NamespaceString::oplog(ns)) {
+        if (nss.isOplog()) {
             _oplogIdent = ident.toString();
             cf = _oplogCf.get();
         } else {
@@ -525,7 +530,7 @@ namespace mongo {
         std::string prefix = _extractPrefix(config);
 
         RocksRecordStore::Params params;
-        params.ns = ns;
+        params.nss = nss;
         params.ident = ident.toString();
         params.prefix = prefix;
         params.isCapped = options.capped;
@@ -535,7 +540,7 @@ namespace mongo {
             params.isCapped ? (options.cappedMaxDocs ? options.cappedMaxDocs : -1) : -1;
         params.cappedCallback = nullptr;
         params.tracksSizeAdjustments = true;
-        if (isNsEnableTimestamp(params.ns)) {
+        if (params.nss.isReplicated()) {
             rocksdb::TOTransaction::enableTimestamp(params.prefix);
         }
         std::unique_ptr<RocksRecordStore> recordStore =
@@ -550,6 +555,7 @@ namespace mongo {
     }
 
     Status RocksEngine::createSortedDataInterface(OperationContext* opCtx,
+                                                  const NamespaceString& nss,
                                                   const CollectionOptions& collOptions,
                                                   StringData ident, const IndexDescriptor* desc) {
         BSONObjBuilder configBuilder;
@@ -558,9 +564,11 @@ namespace mongo {
         return _createIdent(ident, &configBuilder);
     }
 
-    SortedDataInterface* RocksEngine::getSortedDataInterface(OperationContext* opCtx,
-                                                             StringData ident,
-                                                             const IndexDescriptor* desc) {
+    std::unique_ptr<SortedDataInterface> getSortedDataInterface(
+        OperationContext* opCtx, const NamespaceString& nss, const CollectionOptions& collOptions,
+        StringData ident, const IndexDescriptor* desc) {
+        invariant(collOptions.uuid);
+
         auto config = _getIdentConfig(ident);
         std::string prefix = _extractPrefix(config);
 
@@ -571,15 +579,16 @@ namespace mongo {
             rocksdb::TOTransaction::enableTimestamp(prefix);
         }
 
-        RocksIndexBase* index;
+        std::unique_ptr<RocksIndexBase> index;
         if (desc->unique()) {
-            index = new RocksUniqueIndex(_db.get(), _defaultCf.get(), prefix, ident.toString(),
-                                         Ordering::make(desc->keyPattern()), std::move(config),
-                                         desc->parentNS().toString(), desc->indexName(),
-                                         desc->keyPattern(), desc->isPartial(), desc->isIdIndex());
+            index = std::make_unique<RocksUniqueIndex>(
+                _db.get(), _defaultCf.get(), prefix, *collOptions.uuid, ident.toString(),
+                Ordering::make(desc->keyPattern()), std::move(config), desc->parentNS().toString(),
+                desc->indexName(), desc->keyPattern(), desc->isPartial(), desc->isIdIndex());
         } else {
-            auto si = new RocksStandardIndex(_db.get(), _defaultCf.get(), prefix, ident.toString(),
-                                             Ordering::make(desc->keyPattern()), std::move(config));
+            auto si = std::make_unique<RocksStandardIndex>(
+                _db.get(), _defaultCf.get(), prefix, *collOptions.uuid, ident.toString(),
+                Ordering::make(desc->keyPattern()), std::move(config));
             if (rocksGlobalOptions.singleDeleteIndex) {
                 si->enableSingleDelete();
             }
@@ -594,7 +603,8 @@ namespace mongo {
 
     // TODO(wolfkdy); this interface is not fully reviewed
     std::unique_ptr<RecordStore> RocksEngine::makeTemporaryRecordStore(OperationContext* opCtx,
-                                                                       StringData ident) {
+                                                                       StringData ident,
+                                                                       KeyFormat keyFormat) {
         BSONObjBuilder configBuilder;
         auto s = _createIdent(ident, &configBuilder);
         if (!s.isOK()) {
@@ -625,7 +635,8 @@ namespace mongo {
     }
 
     // cannot be rolled back
-    Status RocksEngine::dropIdent(OperationContext* opCtx, StringData ident) {
+    Status RocksEngine::dropIdent(RecoveryUnit* ru, StringData ident,
+                                  const StorageEngine::DropIdentCallback& onDrop) {
         auto config = _tryGetIdentConfig(ident);
         // happens rarely when dropped prefix markers are persisted but metadata changes
         // are lost due to system crash on standalone with default acknowledgement behavior
@@ -665,6 +676,11 @@ namespace mongo {
             stdx::lock_guard<Latch> lk(_identMapMutex);
             _identMap.erase(ident);
         }
+
+        if (onDrop) {
+            onDrop();
+        }
+
         return s;
     }
 
@@ -722,11 +738,11 @@ namespace mongo {
         return Timestamp(_oplogManager->fetchAllDurableValue());
     }
 
-    Timestamp RocksEngine::getOldestOpenReadTimestamp() const {MONGO_UNREACHABLE}
-
     boost::optional<Timestamp> RocksEngine::getOplogNeededForCrashRecovery() const {
         return boost::none;
     }
+
+    size_t RocksEngine::getBlockCacheUsage() const { return _blockCache->GetUsage(); }
 
     bool RocksEngine::isCacheUnderPressure(OperationContext* opCtx) const {
         // TODO(wolfkdy): review rocksdb's memory-stats for answer
@@ -1173,6 +1189,4 @@ namespace mongo {
             _oplogManager->halt();
         }
     }
-
-    void RocksEngine::replicationBatchIsComplete() const { _oplogManager->triggerJournalFlush(); }
 }  // namespace mongo

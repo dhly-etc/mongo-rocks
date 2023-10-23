@@ -77,7 +77,7 @@ namespace mongo {
     class RocksRecordStore : public RecordStore {
     public:
         struct Params {
-            StringData ns;
+            NamespaceString nss;
             std::string ident;
             std::string prefix;
             bool isCapped;

@@ -53,7 +53,7 @@ namespace mongo {
 
     public:
         RocksIndexBase(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
-                       std::string ident, Ordering order, const BSONObj& config);
+                       const UUID& uuid, std::string ident, Ordering order, const BSONObj& config);
 
         virtual SortedDataBuilderInterface* getBulkBuilder(OperationContext* opCtx,
                                                            bool dupsAllowed) = 0;
@@ -102,7 +102,7 @@ namespace mongo {
     class RocksUniqueIndex : public RocksIndexBase {
     public:
         RocksUniqueIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
-                         std::string ident, Ordering order, const BSONObj& config,
+                         const UUID& uuid, std::string ident, Ordering order, const BSONObj& config,
                          std::string collectionNamespace, std::string indexName,
                          const BSONObj& keyPattern, bool partial = false, bool isIdIdx = false);
 
@@ -148,7 +148,8 @@ namespace mongo {
     class RocksStandardIndex : public RocksIndexBase {
     public:
         RocksStandardIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
-                           std::string ident, Ordering order, const BSONObj& config);
+                           const UUID& uuid, std::string ident, Ordering order,
+                           const BSONObj& config);
 
         virtual StatusWith<SpecialFormatInserted> insert(OperationContext* opCtx,
                                                          const BSONObj& key, const RecordId& loc,

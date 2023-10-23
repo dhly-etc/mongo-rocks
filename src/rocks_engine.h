@@ -77,11 +77,7 @@ namespace mongo {
         RocksEngine(const std::string& path, bool durable, int formatVersion, bool readOnly);
         ~RocksEngine();
 
-        virtual bool supportsDocLocking() const override { return true; }
-
         virtual bool supportsDirectoryPerDB() const override { return false; }
-
-        virtual bool isDurable() const override { return _durable; }
 
         virtual bool isEphemeral() const override { return false; }
 
@@ -90,30 +86,31 @@ namespace mongo {
 
         RecoveryUnit* newRecoveryUnit() override;
 
-        Status createRecordStore(OperationContext* opCtx, StringData ns, StringData ident,
-                                 const CollectionOptions& options) override;
+        Status createRecordStore(OperationContext* opCtx, const NamespaceString& nss,
+                                 StringData ident, const CollectionOptions& options,
+                                 KeyFormat keyFormat = KeyFormat::Long) override;
 
-        std::unique_ptr<RecordStore> getRecordStore(OperationContext* opCtx, StringData ns,
-                                                    StringData ident,
+        std::unique_ptr<RecordStore> getRecordStore(OperationContext* opCtx,
+                                                    const NamespaceString& nss, StringData ident,
                                                     const CollectionOptions& options) override;
 
         std::unique_ptr<RecordStore> makeTemporaryRecordStore(OperationContext* opCtx,
-                                                              StringData ident) override;
+                                                              StringData ident,
+                                                              KeyFormat keyFormat) override;
 
-        Status createSortedDataInterface(OperationContext* opCtx,
+        Status createSortedDataInterface(OperationContext* opCtx, const NamespaceString& nss,
                                          const CollectionOptions& collOptions, StringData ident,
                                          const IndexDescriptor* desc) override;
 
-        SortedDataInterface* getSortedDataInterface(OperationContext* opCtx, StringData ident,
-                                                    const IndexDescriptor* desc) override;
+        std::unique_ptr<SortedDataInterface> getSortedDataInterface(
+            OperationContext* opCtx, const NamespaceString& nss,
+            const CollectionOptions& collOptions, StringData ident,
+            const IndexDescriptor* desc) override;
 
-        Status dropIdent(OperationContext* opCtx, StringData ident) override;
+        Status dropIdent(RecoveryUnit* ru, StringData ident,
+                         const StorageEngine::DropIdentCallback& onDrop = nullptr) override;
 
-        virtual Status okToRename(OperationContext* opCtx, StringData fromNS, StringData toNS,
-                                  StringData ident,
-                                  const RecordStore* originalRecordStore) const override;
-
-        int flushAllFiles(OperationContext* opCtx, bool sync) override;
+        void flushAllFiles(OperationContext* opCtx, bool callerHoldsReadLock) override;
 
         Status beginBackup(OperationContext* opCtx) override;
 
@@ -179,17 +176,7 @@ namespace mongo {
 
         Timestamp getAllDurableTimestamp() const override;
 
-        Timestamp getOldestOpenReadTimestamp() const override;
-
         bool supportsReadConcernSnapshot() const final;
-
-        /*
-         * This function is called when replication has completed a batch.  In this function, we
-         * refresh our oplog visiblity read-at-timestamp value.
-         */
-        void replicationBatchIsComplete() const override;
-
-        bool isCacheUnderPressure(OperationContext* opCtx) const override;
 
         bool supportsReadConcernMajority() const final;
 
@@ -229,7 +216,7 @@ namespace mongo {
          * local.oplog.rs for replica sets and local.oplog.$main for master/slave replication).
          * Returns true if a background job is running for the namespace.
          */
-        static bool initRsOplogBackgroundThread(StringData ns);
+        static bool initRsOplogBackgroundThread(const NamespaceString& nss);
         static void appendGlobalStats(BSONObjBuilder& b);
 
         Timestamp getStableTimestamp() const override;
@@ -250,7 +237,7 @@ namespace mongo {
 
         rocksdb::TOTransactionDB* getDB() { return _db.get(); }
         const rocksdb::TOTransactionDB* getDB() const { return _db.get(); }
-        size_t getBlockCacheUsage() const { return _blockCache->GetUsage(); }
+        size_t getBlockCacheUsage() const;
         std::shared_ptr<rocksdb::Cache> getBlockCache() { return _blockCache; }
 
         RocksCounterManager* getCounterManager() const { return _counterManager.get(); }
