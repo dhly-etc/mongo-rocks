@@ -965,10 +965,10 @@ namespace mongo {
     void RocksEngine::setOldestTimestamp(Timestamp oldestTimestamp, bool force) {
         // Set the oldest timestamp to the stable timestamp to ensure that there is no lag window
         // between the two.
-        if (MONGO_FAIL_POINT(RocksSetOldestTSToStableTS)) {
+        if (RocksSetOldestTSToStableTS.shouldFail()) {
             force = false;
         }
-        if (MONGO_FAIL_POINT(RocksPreserveSnapshotHistoryIndefinitely)) {
+        if (RocksPreserveSnapshotHistoryIndefinitely.shouldFail()) {
             return;
         }
 

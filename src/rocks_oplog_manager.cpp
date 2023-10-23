@@ -215,7 +215,7 @@ namespace mongo {
                 }
             }
 
-            while (!_shuttingDown && MONGO_FAIL_POINT(RocksPausePrimaryOplogDurabilityLoop)) {
+            while (!_shuttingDown && RocksPausePrimaryOplogDurabilityLoop.shouldFail()) {
                 lk.unlock();
                 sleepmillis(10);
                 lk.lock();

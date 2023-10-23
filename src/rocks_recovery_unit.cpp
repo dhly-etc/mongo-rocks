@@ -284,7 +284,7 @@ namespace mongo {
         }
         _setState(State::kCommitting);
 
-        if (MONGO_FAIL_POINT(RocksAlwaysNotifyPrepareConflictWaiters)) {
+        if (RocksAlwaysNotifyPrepareConflictWaiters.shouldFail()) {
             notifyDone = true;
         }
 
@@ -321,7 +321,7 @@ namespace mongo {
         }
         _setState(State::kAborting);
 
-        if (MONGO_FAIL_POINT(RocksAlwaysNotifyPrepareConflictWaiters)) {
+        if (RocksAlwaysNotifyPrepareConflictWaiters.shouldFail()) {
             notifyDone = true;
         }
 

@@ -279,7 +279,7 @@ namespace mongo {
         stdx::unique_lock<Latch> lk(_compactionMutex);
         while (_compactionThreadRunning) {
             // check if we have something to compact
-            if (MONGO_FAIL_POINT(RocksCompactionSchedulerPause)) {
+            if (RocksCompactionSchedulerPause.shouldFail()) {
                 unlock_guard<decltype(lk)> rlk(lk);
                 mongo::sleepsecs(1);
                 continue;

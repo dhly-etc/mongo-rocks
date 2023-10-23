@@ -76,9 +76,8 @@ namespace mongo {
         // returned an error other than conflict. Reset PrepareConflictTracker accordingly.
         ON_BLOCK_EXIT([opCtx] { PrepareConflictTracker::get(opCtx).endPrepareConflict(); });
         // If the failpoint is enabled, don't call the function, just simulate a conflict.
-        rocksdb::Status s = MONGO_FAIL_POINT(RocksPrepareConflictForReads)
-                                ? rocksdb::PrepareConflict()
-                                : ROCKS_READ_CHECK(f());
+        rocksdb::Status s = RocksPrepareConflictForReads.shouldFail() ? rocksdb::PrepareConflict()
+                                                                      : ROCKS_READ_CHECK(f());
         if (!IsPrepareConflict(s)) return s;
 
         PrepareConflictTracker::get(opCtx).beginPrepareConflict();
@@ -89,7 +88,7 @@ namespace mongo {
         // Operations executed in this way are expected to be set to ignore prepare conflicts.
         invariant(!opCtx->isIgnoringInterrupts());
 
-        if (MONGO_FAIL_POINT(RocksPrintPrepareConflictLog)) {
+        if (RocksPrintPrepareConflictLog.shouldFail()) {
             rocksPrepareConflictFailPointLog();
         }
 
@@ -123,7 +122,7 @@ namespace mongo {
                               << lock.resourceId.toString() << " in " << modeName(lock.mode));
         }
 
-        if (MONGO_FAIL_POINT(RocksSkipPrepareConflictRetries)) {
+        if (RocksSkipPrepareConflictRetries.shouldFail()) {
             // Callers of wiredTigerPrepareConflictRetry() should eventually call wtRCToStatus() via
             // invariantRocksOK() and have the rocksdb::Busy error bubble up as a
             // WriteConflictException. Enabling the "skipWriteConflictRetries" failpoint in
@@ -136,7 +135,7 @@ namespace mongo {
             attempts++;
             auto lastCount = recoveryUnit->getDurabilityManager()->getPrepareCommitOrAbortCount();
             // If the failpoint is enabled, don't call the function, just simulate a conflict.
-            rocksdb::Status s = MONGO_FAIL_POINT(RocksPrepareConflictForReads)
+            rocksdb::Status s = RocksPrepareConflictForReads.shouldFail()
                                     ? rocksdb::PrepareConflict()
                                     : ROCKS_READ_CHECK(f());
 
