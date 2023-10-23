@@ -52,10 +52,11 @@ namespace mongo {
     public:
         RocksSnapshotManager() = default;
         virtual ~RocksSnapshotManager() {}
-        void setCommittedSnapshot(const Timestamp& ts) final;
-        void dropAllSnapshots() final;
-        void setLocalSnapshot(const Timestamp& ts) final;
-        boost::optional<Timestamp> getLocalSnapshot() final;
+
+        void setCommittedSnapshot(const Timestamp& timestamp) final;
+        void setLastApplied(const Timestamp& timestamp) final;
+        boost::optional<Timestamp> getLastApplied() final;
+        void clearCommittedSnapshot() final;
 
         //
         // RocksDB-specific methods
@@ -97,9 +98,9 @@ namespace mongo {
             MONGO_MAKE_LATCH("RocksSnapshotManager::_committedSnapshotMutex");
         boost::optional<Timestamp> _committedSnapshot;
 
-        // Snapshot to use for reads at a local stable timestamp.
-        mutable Mutex _localSnapshotMutex =  // Guards _localSnapshot.
-            MONGO_MAKE_LATCH("RocksSnapshotManager::_localSnapshotMutex");
-        boost::optional<Timestamp> _localSnapshot;
+        // Timestamp to use for reads at a the lastApplied timestamp.
+        mutable Mutex _lastAppliedMutex =  // Guards _lastApplied.
+            MONGO_MAKE_LATCH("WiredTigerSnapshotManager::_lastAppliedMutex");
+        boost::optional<Timestamp> _lastApplied;
     };
 }  // namespace mongo

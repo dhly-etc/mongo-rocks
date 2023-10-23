@@ -47,21 +47,20 @@ namespace mongo {
         _committedSnapshot = ts;
     }
 
-    void RocksSnapshotManager::setLocalSnapshot(const Timestamp& timestamp) {
-        stdx::lock_guard<Latch> lock(_localSnapshotMutex);
-        if (timestamp.isNull()) {
-            _localSnapshot = boost::none;
-        } else {
-            _localSnapshot = timestamp;
-        }
+    void RocksSnapshotManager::setLastApplied(const Timestamp& timestamp) {
+        stdx::lock_guard<Latch> lock(_lastAppliedMutex);
+        if (timestamp.isNull())
+            _lastApplied = boost::none;
+        else
+            _lastApplied = timestamp;
     }
 
-    boost::optional<Timestamp> RocksSnapshotManager::getLocalSnapshot() {
-        stdx::lock_guard<Latch> lock(_localSnapshotMutex);
-        return _localSnapshot;
+    boost::optional<Timestamp> RocksSnapshotManager::getLastApplied() {
+        stdx::lock_guard<Latch> lock(_lastAppliedMutex);
+        return _lastApplied;
     }
 
-    void RocksSnapshotManager::dropAllSnapshots() {
+    void RocksSnapshotManager::clearCommittedSnapshot() {
         stdx::lock_guard<Latch> lock(_committedSnapshotMutex);
         _committedSnapshot = boost::none;
     }
@@ -89,22 +88,6 @@ namespace mongo {
 
         txnOpen.done();
         return *_committedSnapshot;
-    }
-
-    Timestamp RocksSnapshotManager::beginTransactionOnLocalSnapshot(
-        rocksdb::TOTransactionDB* db, std::unique_ptr<rocksdb::TOTransaction>* txn,
-        PrepareConflictBehavior prepareConflictBehavior,
-        RoundUpPreparedTimestamps roundUpPreparedTimestamps) const {
-        RocksBeginTxnBlock txnOpen(db, txn, prepareConflictBehavior, roundUpPreparedTimestamps);
-        stdx::lock_guard<Latch> lock(_localSnapshotMutex);
-        invariant(_localSnapshot);
-        LOGV2_DEBUG(0, 3, "begin_transaction on local snapshot",
-                    "snapshot_id"_attr = _localSnapshot.get().toString());
-        auto status = txnOpen.setReadSnapshot(_localSnapshot.get());
-        invariant(status.isOK(), status.reason());
-
-        txnOpen.done();
-        return *_localSnapshot;
     }
 
 }  // namespace mongo
