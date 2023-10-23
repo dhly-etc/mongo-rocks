@@ -13,7 +13,6 @@
 #include "mongo/db/modules/rocks/src/totdb/totransaction_impl.h"
 #include "mongo/unittest/unittest.h"
 #include "rocksdb/db.h"
-#include "third_party/s2/util/coding/coder.h"
 
 using std::string;
 

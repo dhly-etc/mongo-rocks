@@ -26,7 +26,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "rocks_compaction_scheduler.h"
 
@@ -42,6 +42,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
+#include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/stdx/condition_variable.h"
@@ -50,8 +51,6 @@
 #include "mongo/util/concurrency/idle_thread_block.h"
 #include "mongo/util/concurrency/notification.h"
 #include "mongo/util/fail_point.h"
-#include "mongo/util/fail_point_service.h"
-#include "mongo/util/log.h"
 #include "rocks_record_store.h"
 #include "rocks_util.h"
 

@@ -27,18 +27,18 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "rocks_oplog_manager.h"
 
 #include <cstring>
 
+#include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/util/concurrency/idle_thread_block.h"
 #include "mongo/util/fail_point.h"
 #include "mongo/util/fail_point_service.h"
-#include "mongo/util/log.h"
 #include "mongo/util/scopeguard.h"
 #include "rocks_engine.h"
 

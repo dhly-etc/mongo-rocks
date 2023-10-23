@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "rocks_engine.h"
 
@@ -63,6 +63,7 @@
 #include "mongo/db/server_recovery.h"
 #include "mongo/db/snapshot_window_options.h"
 #include "mongo/db/storage/journal_listener.h"
+#include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
 #include "mongo/stdx/memory.h"
 #include "mongo/util/background.h"
@@ -70,8 +71,6 @@
 #include "mongo/util/concurrency/ticketholder.h"
 #include "mongo/util/debug_util.h"
 #include "mongo/util/fail_point.h"
-#include "mongo/util/fail_point_service.h"
-#include "mongo/util/log.h"
 #include "mongo/util/processinfo.h"
 #include "mongo_rate_limiter_checker.h"
 #include "rocks_counter_manager.h"
@@ -83,9 +82,9 @@
 
 #define ROCKS_TRACE log()
 #define LOG_FOR_RECOVERY(level) \
-    MONGO_LOG_COMPONENT(level, ::mongo::logger::LogComponent::kStorageRecovery)
+    MONGO_LOG_COMPONENT(level, ::mongo::logv2::LogComponent::kStorageRecovery)
 #define LOG_FOR_ROLLBACK(level) \
-    MONGO_LOG_COMPONENT(level, ::mongo::logger::LogComponent::kReplicationRollback)
+    MONGO_LOG_COMPONENT(level, ::mongo::logv2::LogComponent::kReplicationRollback)
 
 #define ROCKS_ERR(a)                      \
     do {                                  \

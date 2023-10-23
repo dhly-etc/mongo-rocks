@@ -5,14 +5,13 @@
 
 #ifndef ROCKSDB_LITE
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db_impl.h"
 
 #include "mongo/bson/timestamp.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_prepare_iterator.h"
 #include "mongo/logv2/log.h"
-#include "third_party/s2/util/coding/coder.h"
 
 namespace rocksdb {
 

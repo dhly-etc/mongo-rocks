@@ -26,7 +26,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "rocks_snapshot_manager.h"
 
@@ -34,8 +34,8 @@
 
 #include "mongo/base/checked_cast.h"
 #include "mongo/db/server_options.h"
+#include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
-#include "mongo/util/log.h"
 #include "rocks_begin_transaction_block.h"
 #include "rocks_recovery_unit.h"
 

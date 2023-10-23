@@ -11,7 +11,6 @@
 #include "rocksdb/comparator.h"
 #include "rocksdb/db.h"
 #include "rocksdb/utilities/stackable_db.h"
-#include "third_party/s2/util/coding/coder.h"
 
 namespace rocksdb {
 

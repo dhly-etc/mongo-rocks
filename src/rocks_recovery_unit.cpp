@@ -26,7 +26,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "rocks_recovery_unit.h"
 
@@ -45,8 +45,8 @@
 #include "mongo/db/operation_context.h"
 #include "mongo/db/server_options.h"
 #include "mongo/db/storage/journal_listener.h"
+#include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
-#include "mongo/util/log.h"
 #include "mongo/util/stacktrace.h"
 #include "rocks_begin_transaction_block.h"
 #include "rocks_engine.h"
@@ -68,7 +68,7 @@ namespace mongo {
         // getMore, so there is a chance the snapshot ID will be reused.
         AtomicWord<unsigned long long> nextSnapshotId{1};
 
-        logger::LogSeverity kSlowTransactionSeverity = logger::LogSeverity::Debug(1);
+        logv2::LogSeverity kSlowTransactionSeverity = logv2::LogSeverity::Debug(1);
 
         /**
          * Returns a string representation of RocksRecoveryUnit::State for logging.

@@ -5,7 +5,7 @@
 
 #ifndef ROCKSDB_LITE
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 #include "mongo/db/modules/rocks/src/totdb/totransaction_impl.h"
 
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
@@ -15,7 +15,6 @@
 #include "rocksdb/comparator.h"
 #include "rocksdb/db.h"
 #include "rocksdb/status.h"
-#include "third_party/s2/util/coding/coder.h"
 
 namespace rocksdb {
 

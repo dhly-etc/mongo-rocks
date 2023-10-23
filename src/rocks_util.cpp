@@ -25,9 +25,8 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "rocks_util.h"
 
@@ -42,9 +41,9 @@
 #include <rocksdb/perf_context.h>
 #include <rocksdb/version.h>
 
-#include "mongo/db/concurrency/write_conflict_exception.h"
+#include "mongo/db/concurrency/exception_util.h"
+#include "mongo/logv2/log.h"
 #include "mongo/platform/endian.h"
-#include "mongo/util/log.h"
 
 namespace mongo {
     std::string encodePrefix(uint32_t prefix) {

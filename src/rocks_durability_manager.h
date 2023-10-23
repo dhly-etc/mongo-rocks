@@ -33,8 +33,9 @@
 #include "mongo/stdx/condition_variable.h"
 
 namespace rocksdb {
+    class ColumnFamilyHandle;
     class DB;
-}
+}  // namespace rocksdb
 
 namespace mongo {
 
