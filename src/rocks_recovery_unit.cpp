@@ -332,7 +332,8 @@ namespace mongo {
             for (Changes::const_reverse_iterator it = _changes.rbegin(), end = _changes.rend();
                  it != end; ++it) {
                 const auto& change = *it;
-                LOG(2) << "CUSTOM ROLLBACK " << redact(demangleName(typeid(*change)));
+                LOGV2_DEBUG(0, 2, "CUSTOM ROLLBACK",
+                            "reason"_attr = redact(demangleName(typeid(*change))));
                 change->rollback();
             }
             _changes.clear();
@@ -360,7 +361,7 @@ namespace mongo {
 
         getTransaction();
 
-        LOG(1) << "preparing transaction at time: " << _prepareTimestamp;
+        LOGV2_DEBUG(0, 1, "preparing transaction", "timestamp"_attr = _prepareTimestamp);
         auto status =
             _transaction->SetPrepareTimeStamp(rocksdb::RocksTimeStamp(_prepareTimestamp.asULL()));
         invariant(status.ok(), status.ToString());
@@ -440,9 +441,9 @@ namespace mongo {
         if (_timer) {
             const int transactionTime = _timer->millis();
             if (transactionTime >= serverGlobalParams.slowMS) {
-                LOG(kSlowTransactionSeverity)
-                    << "Slow Rocks transaction. Lifetime of SnapshotId " << _mySnapshotId << " was "
-                    << transactionTime << "ms";
+                LOGV2_DEBUG(0, kSlowTransactionSeverity, "Slow Rocks transaction",
+                            "snapshot_id"_attr = _mySnapshotId,
+                            "transactionTimeMillis"_attr = transactionTime);
             }
         }
         rocksdb::Status status;
@@ -463,11 +464,11 @@ namespace mongo {
                 invariant(status.ok(), status.ToString());
             }
             status = _transaction->Commit();
-            LOG(3) << "Rocks commit_transaction for snapshot id " << _mySnapshotId;
+            LOGV2_DEBUG(0, 3, "Rocks commit_transaction", "snapshot_id"_attr = _mySnapshotId);
         } else {
             status = _transaction->Rollback();
             invariant(status.ok(), status.ToString());
-            LOG(3) << "Rocks rollback_transaction for snapshot id " << _mySnapshotId;
+            LOGV2_DEBUG(0, 3, "Rocks rollback_transaction", "snapshot_id"_attr = _mySnapshotId);
         }
 
         _transaction.reset(nullptr);
@@ -646,8 +647,8 @@ namespace mongo {
             }
         }
 
-        LOG(1) << "Rocks begin_transaction for snapshot id " << _mySnapshotId << ",src "
-               << (int)_timestampReadSource;
+        LOGV2_DEBUG(0, 1, "Rocks begin_transaction", "snapshot_id"_attr = _mySnapshotId,
+                    "src"_attr = (int)_timestampReadSource);
     }
 
     Timestamp RocksRecoveryUnit::_beginTransactionAtAllDurableTimestamp() {
@@ -718,7 +719,8 @@ namespace mongo {
     }
 
     Status RocksRecoveryUnit::setTimestamp(Timestamp timestamp) {
-        LOG(3) << "Rocks set timestamp of future write operations to " << timestamp;
+        LOGV2_DEBUG(0, 3, "Rocks set timestamp of future write operations",
+                    "timestamp"_attr = timestamp);
         invariant(_inUnitOfWork(), toString(_state));
         invariant(_prepareTimestamp.isNull());
         invariant(_commitTimestamp.isNull(),
@@ -837,8 +839,9 @@ namespace mongo {
 
     void RocksRecoveryUnit::setTimestampReadSource(ReadSource readSource,
                                                    boost::optional<Timestamp> provided) {
-        LOG(3) << "setting timestamp read source: " << static_cast<int>(readSource)
-               << ", provided timestamp: " << ((provided) ? provided->toString() : "none");
+        LOGV2_DEBUG(0, 3, "setting timestamp read source",
+                    "readSource"_attr = static_cast<int>(readSource),
+                    "provided_timestamp"_attr = ((provided) ? provided->toString() : "none"));
 
         invariant(!_isActive() || _timestampReadSource == readSource,
                   str::stream() << "Current state: " << toString(_state)

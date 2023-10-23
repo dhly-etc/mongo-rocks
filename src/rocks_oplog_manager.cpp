@@ -74,7 +74,8 @@ namespace mongo {
             // rollback before servicing oplog reads.
             auto oplogVisibility = Timestamp(lastRecord->id.repr());
             setOplogReadTimestamp(oplogVisibility);
-            LOG(1) << "Setting oplog visibility at startup. Val: " << oplogVisibility;
+            LOGV2_DEBUG(0, 1, "Setting oplog visibility at startup",
+                        "value"_attr = oplogVisibility);
         } else {
             // Avoid setting oplog visibility to 0. That means "everything is visible".
             setOplogReadTimestamp(Timestamp(kMinimumTimestamp));
@@ -118,7 +119,7 @@ namespace mongo {
             oplogRecordStore->getCursor(opCtx, false /* false = reverse cursor */);
         auto lastRecord = cursor->next();
         if (!lastRecord) {
-            LOG(2) << "Trying to query an empty oplog";
+            LOGV2_DEBUG(0, 2, "Trying to query an empty oplog");
             opCtx->recoveryUnit()->abandonSnapshot();
             return;
         }
@@ -137,10 +138,10 @@ namespace mongo {
         opCtx->waitForConditionOrInterrupt(_opsBecameVisibleCV, lk, [&] {
             auto newLatestVisibleTimestamp = getOplogReadTimestamp();
             if (newLatestVisibleTimestamp < currentLatestVisibleTimestamp) {
-                LOG(1)
-                    << "Oplog latest visible timestamp went backwards. newLatestVisibleTimestamp: "
-                    << Timestamp(newLatestVisibleTimestamp) << " currentLatestVisibleTimestamp: "
-                    << Timestamp(currentLatestVisibleTimestamp);
+                LOGV2_DEBUG(0, 1, "Oplog latest visible timestamp went backwards",
+                            "newLatestVisibleTimestamp"_attr = Timestamp(newLatestVisibleTimestamp),
+                            "currentLatestVisibleTimestamp"_attr =
+                                Timestamp(currentLatestVisibleTimestamp));
                 // If the visibility went backwards, this means a rollback occurred.
                 // Thus, we are finished waiting.
                 return true;
@@ -154,8 +155,9 @@ namespace mongo {
             // value.
             RecordId latestVisible = RecordId(currentLatestVisibleTimestamp);
             if (latestVisible < waitingFor) {
-                LOG(2) << "Operation is waiting for " << waitingFor << "; latestVisible is "
-                       << Timestamp(currentLatestVisibleTimestamp);
+                LOGV2_DEBUG(0, 2, "Operation is waiting for visibility",
+                            "requested"_attr = waitingFor,
+                            "latestVisible"_attr = Timestamp(currentLatestVisibleTimestamp));
             }
             return latestVisible >= waitingFor;
         });
@@ -235,7 +237,8 @@ namespace mongo {
             // where we commit data file changes separately from oplog changes, so ignore
             // a non-incrementing timestamp.
             if (newTimestamp <= _oplogReadTimestamp.load()) {
-                LOG(2) << "No new oplog entries were made visible: " << Timestamp(newTimestamp);
+                LOGV2_DEBUG(0, 2, "No new oplog entries were made visible",
+                            "timestamp"_attr = Timestamp(newTimestamp));
                 continue;
             }
 
@@ -268,7 +271,8 @@ namespace mongo {
     void RocksOplogManager::_setOplogReadTimestamp(WithLock, uint64_t newTimestamp) {
         _oplogReadTimestamp.store(newTimestamp);
         _opsBecameVisibleCV.notify_all();
-        LOG(2) << "Setting new oplogReadTimestamp: " << Timestamp(newTimestamp);
+        LOGV2_DEBUG(0, 2, "Setting new oplogReadTimestamp",
+                    "timestamp"_attr = Timestamp(newTimestamp));
     }
 
     Timestamp RocksOplogManager::fetchAllDurableValue() {

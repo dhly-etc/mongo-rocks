@@ -298,7 +298,7 @@ namespace mongo {
             }
         }
         lk.unlock();
-        LOG(1) << "Compaction thread terminating" << std::endl;
+        LOGV2_DEBUG(0, 1, "Compaction thread terminating");
     }
 
     void CompactionBackgroundJob::scheduleCompactOp(
@@ -320,11 +320,10 @@ namespace mongo {
         rocksdb::Slice* start = !op._start_str.empty() ? &start_slice : nullptr;
         rocksdb::Slice* end = !op._end_str.empty() ? &end_slice : nullptr;
         const bool isOplog = NamespaceString::oplog(op._cf->GetName());
-        LOG(1) << "Starting compaction of cf: " << op._cf->GetName()
-               << " range: " << (start ? start->ToString(true) : "<begin>") << " .. "
-               << (end ? end->ToString(true) : "<end>") << " (rangeDropped is " << op._rangeDropped
-               << ")"
-               << " (isOplog is " << isOplog << ")";
+        LOGV2_DEBUG(0, 1, "Starting compaction of cf", "cf"_attr = op._cf->GetName(),
+                    "rangeStart"_attr = (start ? start->ToString(true) : "<begin>"),
+                    "rangeEnd"_attr = (end ? end->ToString(true) : "<end>"),
+                    "rangeDropped"_attr = op._rangeDropped, "isOplog"_attr = isOplog);
 
         if (op._rangeDropped || isOplog) {
             std::vector<rocksdb::LiveFileMetaData> beforeDelFiles;
@@ -359,7 +358,8 @@ namespace mongo {
                 return toDelFiles;
             };
             if (isOplog) {
-                LOG(1) << "Before DeleteFilesInRange Stats: " << op._cf->GetName();
+                LOGV2_DEBUG(0, 1, "Before DeleteFilesInRange Stats",
+                            "name"_attr = op._cf->GetName());
                 beforeDelFiles = queryDelFilesInRange();
             }
 
@@ -385,7 +385,8 @@ namespace mongo {
             }
 
             if (isOplog) {
-                LOG(1) << "After DeleteFilesInRange Stats: " << op._cf->GetName();
+                LOGV2_DEBUG(0, 1, "After DeleteFilesInRange Stats",
+                            "name"_attr = op._cf->GetName());
                 afterDelFiles = queryDelFilesInRange();
                 [&]() {
                     for (const auto& f : beforeDelFiles) {
@@ -505,7 +506,8 @@ namespace mongo {
         compact(cf, begin, end, false, kOrderOplog, notification);
         auto s = notification->get();
         if (!s.isOK()) {
-            LOG(0) << "compactOplog to " << rocksdb::Slice(end).ToString() << " failed " << s;
+            LOGV2_DEBUG(0, 0, "compactOplog failed", "target"_attr = rocksdb::Slice(end).ToString(),
+                        "reason"_attr = s);
         }
         return s;
     }
@@ -517,8 +519,9 @@ namespace mongo {
 
     void RocksCompactionScheduler::compactDroppedPrefix(rocksdb::ColumnFamilyHandle* cf,
                                                         const std::string& prefix) {
-        LOG(0) << "Compacting dropped prefix: " << rocksdb::Slice(prefix).ToString(true)
-               << " from cf: " << cf->GetName();
+        LOGV2_DEBUG(0, 0, "Compacting dropped prefix from cf",
+                    "prefix"_attr = rocksdb::Slice(prefix).ToString(true),
+                    "cf"_attr = cf->GetName());
         compact(cf, prefix, rocksGetNextPrefix(prefix), true, kOrderDroppedRange, boost::none);
     }
 
@@ -565,7 +568,7 @@ namespace mongo {
                 stdx::lock_guard<Latch> lk(_droppedDataMutex);
                 _droppedPrefixes.emplace(int_prefix, BSONObj(iter->value().data()).copy());
             }
-            LOG(1) << "Compacting dropped prefix: " << prefix.ToString(true);
+            LOGV2_DEBUG(0, 1, "Compacting dropped prefix", "prefix"_attr = prefix.ToString(true));
             for (auto cf : cfs) {
                 compactDroppedPrefix(cf, prefix.ToString());
             }

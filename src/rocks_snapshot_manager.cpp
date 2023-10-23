@@ -98,7 +98,8 @@ namespace mongo {
         RocksBeginTxnBlock txnOpen(db, txn, prepareConflictBehavior, roundUpPreparedTimestamps);
         stdx::lock_guard<Latch> lock(_localSnapshotMutex);
         invariant(_localSnapshot);
-        LOG(3) << "begin_transaction on local snapshot " << _localSnapshot.get().toString();
+        LOGV2_DEBUG(0, 3, "begin_transaction on local snapshot",
+                    "snapshot_id"_attr = _localSnapshot.get().toString());
         auto status = txnOpen.setReadSnapshot(_localSnapshot.get());
         invariant(status.isOK(), status.reason());
 

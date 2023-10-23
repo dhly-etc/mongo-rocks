@@ -104,7 +104,7 @@ namespace mongo {
 
         virtual void run() override {
             ThreadClient tc(name(), getGlobalServiceContext());
-            LOG(1) << "starting " << name() << " thread";
+            LOGV2_DEBUG(0, 1, "starting thread", "name"_attr = name());
 
             while (!_shuttingDown.load()) {
                 try {
@@ -121,7 +121,7 @@ namespace mongo {
                 MONGO_IDLE_THREAD_BLOCK;
                 sleepmillis(ms);
             }
-            LOG(1) << "stopping " << name() << " thread";
+            LOGV2_DEBUG(0, 1, "stopping thread", "name"_attr = name());
         }
 
         void shutdown() {
@@ -466,7 +466,7 @@ namespace mongo {
     }
 
     int RocksEngine::flushAllFiles(OperationContext* opCtx, bool sync) {
-        LOG(1) << "RocksEngine::flushAllFiles";
+        LOGV2_DEBUG(0, 1, "RocksEngine::flushAllFiles");
         _counterManager->sync();
         _durabilityManager->waitUntilDurable(true);
         return 1;
@@ -981,13 +981,14 @@ namespace mongo {
             }
             invariantRocksOK(_db->SetTimeStamp(rocksdb::TimeStampType::kCommitted, ts, force));
             _oldestTimestamp.store(oldestTimestamp.asULL());
-            LOG(2) << "oldest_timestamp and commit_timestamp force set to " << oldestTimestamp;
+            LOGV2_DEBUG(0, 2, "oldest_timestamp and commit_timestamp force set",
+                        "timestamp"_attr = oldestTimestamp);
         } else {
             invariantRocksOK(_db->SetTimeStamp(rocksdb::TimeStampType::kOldest, ts, force));
             if (_oldestTimestamp.load() < oldestTimestamp.asULL()) {
                 _oldestTimestamp.store(oldestTimestamp.asULL());
             }
-            LOG(2) << "oldest_timestamp set to " << oldestTimestamp;
+            LOGV2_DEBUG(0, 2, "oldest_timestamp set", "timestamp"_attr = oldestTimestamp);
         }
     }
 

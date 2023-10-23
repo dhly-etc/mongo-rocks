@@ -167,12 +167,13 @@ namespace mongo {
             double actualResetRatio = std::max(0.9, std::min(resetRatio, 1.1));
             bool willReset = exhausted || iops >= getMongoRateLimitParameter().getIops() ||
                              kbps >= getMongoRateLimitParameter().getMbps() * 1024;
-            LOG(1) << "[Mongo Rate Limiter Checker]: exhausted: " << exhausted
-                   << "; tokens: " << _mongoRateLimiter->getTokensPerSecond() << "; iops: " << iops
-                   << "/" << getMongoRateLimitParameter().getIops() << "; kbps: " << kbps << "/"
-                   << (getMongoRateLimitParameter().getMbps() * 1024)
-                   << "; resetRatio: " << resetRatio << "=>" << actualResetRatio << "; ("
-                   << (willReset ? "true" : "false") << ");";
+            LOGV2_DEBUG(0, 1, "Mongo Rate Limiter Checker", "exhausted"_attr = exhausted,
+                        "tokens"_attr = _mongoRateLimiter->getTokensPerSecond(), "iops"_attr = iops,
+                        "iopsLimit"_attr = getMongoRateLimitParameter().getIops(),
+                        "kbps"_attr = kbps,
+                        "kbpsLimit"_attr = (getMongoRateLimitParameter().getMbps() * 1024),
+                        "resetRatio"_attr = resetRatio, "actualResetRatio"_attr = actualResetRatio,
+                        "willReset"_attr = (willReset ? "true" : "false"));
             if (willReset) {
                 return actualResetRatio;
             }

@@ -45,8 +45,9 @@ namespace mongo {
     MONGO_FAIL_POINT_DEFINE(RocksPrintPrepareConflictLog);
 
     void rocksPrepareConflictLog(int attempts) {
-        LOG(1) << "Caught ROCKS_PREPARE_CONFLICT, attempt " << attempts
-               << ". Waiting for unit of work to commit or abort.";
+        LOGV2_DEBUG(0, 1,
+                    "Caught ROCKS_PREPARE_CONFLICT, waiting for unit of work to commit or abort",
+                    "attempts"_attr = attempts);
     }
 
     void rocksPrepareConflictFailPointLog() {
