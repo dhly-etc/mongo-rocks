@@ -17,6 +17,8 @@
 
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
+using namespace mongo;
+
 namespace rocksdb {
 
     namespace {
@@ -86,8 +88,8 @@ namespace rocksdb {
             return Status::NotSupported("set read ts is supposed to be set only once");
         }
 
-        LOG(1) << "TOTDB txn id: " << txn_id_ << "set read ts: " << timestamp
-               << "force: " << core_->timestamp_round_read_;
+        LOGV2_DEBUG(0, 1, "TOTDB txn set read timestamp", "txn_id"_attr = txn_id_,
+                    "timestamp"_attr = timestamp, "force"_attr = core_->timestamp_round_read_);
 
         Status s = txn_db_impl_->AddReadQueue(core_, timestamp);
         if (!s.ok()) {
@@ -95,7 +97,7 @@ namespace rocksdb {
         }
         invariant(core_->read_ts_set_);
         invariant(core_->read_ts_ >= timestamp);
-        Encoder(core_->read_ts_buffer_, sizeof(core_->read_ts_)).put64(core_->read_ts_);
+        DataView(core_->read_ts_buffer_).write<LittleEndian<uint64_t>>(core_->read_ts_);
         // If we already have a snapshot, it may be too early to match
         // the timestamp (including the one we just read, if rounding
         // to oldest).  Get a new one.
@@ -146,7 +148,8 @@ namespace rocksdb {
         }
         invariant(core_->commit_ts_set_ && (core_->first_commit_ts_ <= core_->commit_ts_));
 
-        LOG(2) << "TOTDB txn id " << core_->txn_id_ << "set commit ts " << timestamp;
+        LOGV2_DEBUG(0, 2, "TOTDB txn set commit timestamp", "txn_id"_attr = core_->txn_id_,
+                    "timestamp"_attr = timestamp);
         return Status::OK();
     }
 
@@ -161,7 +164,8 @@ namespace rocksdb {
         }
         invariant(core_->durable_ts_set_);
 
-        LOG(2) << "TOTDB txn id " << core_->txn_id_ << "set durable ts " << timestamp;
+        LOGV2_DEBUG(0, 2, "TOTDB txn set durable timestamp", "txn_id"_attr = core_->txn_id_,
+                    "timestamp"_attr = timestamp);
         return Status::OK();
     }
 
@@ -196,7 +200,7 @@ namespace rocksdb {
           state_(TOTransaction::kStarted),
           txn_snapshot(nullptr),
           write_batch_(&wbwidx_default_comparator, 0, true /*overwrite_keys*/, 0) {
-        Encoder(read_ts_buffer_, sizeof(read_ts_)).put64(read_ts_);
+        DataView(read_ts_buffer_).write<LittleEndian<uint64_t>>(read_ts_);
     }
 
     const TOTransactionImpl::ActiveTxnNode* TOTransactionImpl::GetCore() const {
@@ -366,7 +370,7 @@ namespace rocksdb {
             size_t cnt = 0;
             Slice ts_slice(ts_buf, sizeof(RocksTimeStamp));
             const auto ts_sz_func = [&](uint32_t) {
-                Encoder(ts_buf, sizeof(RocksTimeStamp)).put64(asof_commit_timestamps_[cnt++]);
+                DataView(ts_buf).write<LittleEndian<uint64_t>>(asof_commit_timestamps_[cnt++]);
                 return sizeof(RocksTimeStamp);
             };
             GetWriteBatch()->GetWriteBatch()->UpdateTimestamps(ts_slice, ts_sz_func);
@@ -393,7 +397,7 @@ namespace rocksdb {
         // prepareHeap needs writeBatch for sanity check in debug mode.
         GetWriteBatch()->Clear();
 #endif  // NDEBUG
-        LOG(2) << "TOTDB txn id " << txn_id_ << " committed";
+        LOGV2_DEBUG(0, 2, "TOTDB txn commit", "txn_id"_attr = txn_id_);
         return s;
     }
 
@@ -408,7 +412,7 @@ namespace rocksdb {
 
         GetWriteBatch()->Clear();
 
-        LOG(2) << "TOTDB txn id " << txn_id_ << " rollbacked";
+        LOGV2_DEBUG(0, 2, "TOTDB txn rollback", "txn_id"_attr = txn_id_);
         return s;
     }
 
