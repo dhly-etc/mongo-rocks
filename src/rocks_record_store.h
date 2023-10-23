@@ -55,14 +55,6 @@
     (((RocksWriteConflictException.shouldFail())) ? (rocksdb::Status::Busy("failpoint simulate")) \
                                                   : (x))
 
-/**
- * Identical to ROCKS_OP_CHECK except this is checked on cursor seeks/advancement.
- */
-#define ROCKS_READ_CHECK(x)                               \
-    (((RocksWriteConflictExceptionForReads.shouldFail())) \
-         ? (rocksdb::Status::Busy("failpoint simulate"))  \
-         : (x))
-
 namespace rocksdb {
     class TOTransactionDB;
     class Iterator;
@@ -91,13 +83,11 @@ namespace mongo {
             bool isCapped;
             int64_t cappedMaxSize;
             int64_t cappedMaxDocs;
-            CappedCallback* cappedCallback;
             bool tracksSizeAdjustments;
             Params()
                 : isCapped(false),
                   cappedMaxSize(-1),
                   cappedMaxDocs(-1),
-                  cappedCallback(nullptr),
                   tracksSizeAdjustments(true) {}
         };
         RocksRecordStore(RocksEngine* engine, rocksdb::ColumnFamilyHandle* cf,
@@ -106,90 +96,75 @@ namespace mongo {
         virtual ~RocksRecordStore();
 
         // name of the RecordStore implementation
-        virtual const char* name() const { return "rocks"; }
+        const char* name() const final { return "rocks"; }
 
-        virtual long long dataSize(OperationContext* opCtx) const;
+        KeyFormat keyFormat() const final;
 
-        virtual long long numRecords(OperationContext* opCtx) const;
+        NamespaceString ns(OperationContext* opCtx) const final;
 
-        virtual bool isCapped() const { return _isCapped; }
+        long long dataSize(OperationContext* opCtx) const final;
 
-        virtual int64_t storageSize(OperationContext* opCtx, BSONObjBuilder* extraInfo = NULL,
-                                    int infoLevel = 0) const;
+        long long numRecords(OperationContext* opCtx) const final;
 
-        virtual bool isInRecordIdOrder() const override { return true; }
-
-        const std::string& getIdent() const override { return _ident; }
+        int64_t storageSize(OperationContext* opCtx, BSONObjBuilder* extraInfo = NULL,
+                            int infoLevel = 0) const final;
 
         // CRUD related
 
-        virtual RecordData dataFor(OperationContext* opCtx, const RecordId& loc) const;
+        bool findRecord(OperationContext* opCtx, const RecordId& loc, RecordData* out) const final;
 
-        virtual bool findRecord(OperationContext* opCtx, const RecordId& loc,
-                                RecordData* out) const;
+        void doDeleteRecord(OperationContext* opCtx, const RecordId& dl) final;
 
-        virtual void deleteRecord(OperationContext* opCtx, const RecordId& dl);
+        Status doInsertRecords(OperationContext* opCtx, std::vector<Record>* records,
+                               const std::vector<Timestamp>& timestamps) final;
 
-        virtual StatusWith<RecordId> insertRecord(OperationContext* opCtx, const char* data,
-                                                  int len, Timestamp timestamp);
+        Status doUpdateRecord(OperationContext* opCtx, const RecordId& oldLocation,
+                              const char* data, int len) final;
 
-        virtual Status insertRecords(OperationContext* opCtx, std::vector<Record>* records,
-                                     const std::vector<Timestamp>& timestamps);
+        bool updateWithDamagesSupported() const final;
 
-        virtual Status insertRecordsWithDocWriter(OperationContext* opCtx,
-                                                  const DocWriter* const* docs,
-                                                  const Timestamp* timestamps, size_t nDocs,
-                                                  RecordId* idsOut);
+        StatusWith<RecordData> doUpdateWithDamages(OperationContext* opCtx, const RecordId& loc,
+                                                   const RecordData& oldRec,
+                                                   const char* damageSource,
+                                                   const mutablebson::DamageVector& damages) final;
 
-        virtual Status updateRecord(OperationContext* opCtx, const RecordId& oldLocation,
-                                    const char* data, int len);
-
-        virtual bool updateWithDamagesSupported() const;
-
-        virtual StatusWith<RecordData> updateWithDamages(OperationContext* opCtx,
-                                                         const RecordId& loc,
-                                                         const RecordData& oldRec,
-                                                         const char* damageSource,
-                                                         const mutablebson::DamageVector& damages);
+        void printRecordMetadata(OperationContext* opCtx, const RecordId& recordId,
+                                 std::set<Timestamp>* recordTimestamps) const final;
 
         std::unique_ptr<SeekableRecordCursor> getCursor(OperationContext* opCtx,
                                                         bool forward) const final;
 
-        virtual Status truncate(OperationContext* opCtx);
+        Status doTruncate(OperationContext* opCtx) final;
 
-        virtual bool compactSupported() const { return true; }
-        virtual bool compactsInPlace() const { return true; }
+        Status doRangeTruncate(OperationContext* opCtx, const RecordId& minRecordId,
+                               const RecordId& maxRecordId, int64_t hintDataSizeDiff,
+                               int64_t hintNumRecordsDiff) final;
 
-        virtual Status compact(OperationContext* opCtx) final;
+        bool compactSupported() const final { return true; }
 
-        virtual void validate(OperationContext* opCtx, ValidateCmdLevel level,
-                              ValidateResults* results, BSONObjBuilder* output);
+        Status doCompact(OperationContext* opCtx, boost::optional<int64_t> freeSpaceTargetMB) final;
 
-        virtual void appendCustomStats(OperationContext* opCtx, BSONObjBuilder* result,
-                                       double scale) const;
+        void validate(OperationContext* opCtx, bool full, ValidateResults* results) final;
 
-        virtual void cappedTruncateAfter(OperationContext* opCtx, RecordId end, bool inclusive);
-        void cappedTruncateAfter(OperationContext* opCtx, RecordId end, bool inclusive,
-                                 bool isTruncate);
+        void appendNumericCustomStats(OperationContext* opCtx, BSONObjBuilder* result,
+                                      double scale) const final;
 
-        virtual boost::optional<RecordId> oplogStartHack(OperationContext* opCtx,
-                                                         const RecordId& startingPosition) const;
+        void doCappedTruncateAfter(OperationContext* opCtx, const RecordId& end, bool inclusive,
+                                   const AboutToDeleteRecordCallback& aboutToDelete) final;
 
-        virtual Status oplogDiskLocRegister(OperationContext* opCtx, const Timestamp& opTime,
-                                            bool orderedCommit);
+        Status oplogDiskLocRegisterImpl(OperationContext* opCtx, const Timestamp& opTime,
+                                        bool orderedCommit) final;
 
-        void waitForAllEarlierOplogWritesToBeVisible(OperationContext* opCtx) const override;
+        void waitForAllEarlierOplogWritesToBeVisibleImpl(OperationContext* opCtx) const final;
 
-        virtual void updateStatsAfterRepair(OperationContext* opCtx, long long numRecords,
-                                            long long dataSize);
+        RecordId getLargestKey(OperationContext* opCtx) const final;
 
-        virtual Status updateCappedSize(OperationContext* opCtx,
-                                        long long cappedSize) override final;
+        void reserveRecordIds(OperationContext* opCtx, std::vector<RecordId>* out,
+                              size_t nRecords) final;
 
-        void setCappedCallback(CappedCallback* cb) {
-            stdx::lock_guard<Latch> lk(_cappedCallbackMutex);
-            _cappedCallback = cb;
-        }
+        void updateStatsAfterRepair(OperationContext* opCtx, long long numRecords,
+                                    long long dataSize) final;
+
         int64_t cappedMaxDocs() const {
             invariant(_isCapped);
             return _cappedMaxDocs;
@@ -200,15 +175,7 @@ namespace mongo {
         }
         bool isOplog() const { return _isOplog; }
 
-        int64_t cappedDeleteAsNeeded(OperationContext* opCtx, const RecordId& justInserted);
-        int64_t cappedDeleteAsNeeded_inlock(OperationContext* opCtx, const RecordId& justInserted);
-
-        bool reclaimOplog(OperationContext* opCtx);
-        bool reclaimOplog(OperationContext* opCtx, Timestamp persistedTimestamp);
-
-        bool haveCappedWaiters();
-
-        void notifyCappedWaitersIfNeeded();
+        void reclaimOplog(OperationContext* opCtx) final;
 
         stdx::timed_mutex& cappedDeleterMutex() { return _cappedDeleterMutex; }
 
@@ -229,12 +196,14 @@ namespace mongo {
 
             boost::optional<Record> next() final;
             boost::optional<Record> seekExact(const RecordId& id) final;
+            boost::optional<Record> seekNear(const RecordId& start) final;
             boost::optional<Record> seekToLast();
             void save() final;
             void saveUnpositioned() final;
-            bool restore() final;
+            bool restore(bool tolerateCappedRepositioning = true) final;
             void detachFromOperationContext() final;
             void reattachToOperationContext(OperationContext* opCtx) final;
+            void setSaveStorageCursorOnDetachFromOperationContext(bool) final;
 
         private:
             /**
@@ -304,7 +273,6 @@ namespace mongo {
         int64_t _cappedMaxSize;
         int64_t _cappedMaxSizeSlack;  // when to start applying backpressure
         const int64_t _cappedMaxDocs;
-        CappedCallback* _cappedCallback;
         mutable Mutex _cappedCallbackMutex =
             MONGO_MAKE_LATCH("WiredTigerRecordStore::_cappedCallbackMutex");
 
