@@ -37,10 +37,10 @@
 #include <vector>
 
 #include "mongo/base/status.h"
-#include "mongo/platform/mutex.h"
-#include "mongo/util/timer.h"
-#include "mongo/util/concurrency/notification.h"
 #include "mongo/bson/bsonobj.h"
+#include "mongo/platform/mutex.h"
+#include "mongo/util/concurrency/notification.h"
+#include "mongo/util/timer.h"
 
 namespace rocksdb {
     class CompactionFilterFactory;
@@ -51,7 +51,7 @@ namespace rocksdb {
     class WriteBatch;
     class TOTransaction;
     class TOTransactionDB;
-}
+}  // namespace rocksdb
 
 namespace mongo {
 
@@ -74,24 +74,27 @@ namespace mongo {
 
         static int getSkippedDeletionsThreshold() { return kSkippedDeletionsThreshold; }
 
-        void reportSkippedDeletionsAboveThreshold(rocksdb::ColumnFamilyHandle* cf, const std::string& prefix);
+        void reportSkippedDeletionsAboveThreshold(rocksdb::ColumnFamilyHandle* cf,
+                                                  const std::string& prefix);
 
         // schedule compact range operation for execution in _compactionThread
         void compactAll();
-        Status compactOplog(rocksdb::ColumnFamilyHandle* cf, const std::string& begin, const std::string& end);
+        Status compactOplog(rocksdb::ColumnFamilyHandle* cf, const std::string& begin,
+                            const std::string& end);
 
         rocksdb::CompactionFilterFactory* createCompactionFilterFactory();
         std::unordered_map<uint32_t, BSONObj> getDroppedPrefixes() const;
-        boost::optional<std::pair<uint32_t, std::pair<std::string, std::string>>> getOplogDeleteUntil() const;
+        boost::optional<std::pair<uint32_t, std::pair<std::string, std::string>>>
+        getOplogDeleteUntil() const;
 
         // load dropped prefixes, and re-schedule compaction of each dropped prefix.
         // as we don't know which cf a prefix exists, we have to compact each prefix out of each cf.
         // since prefix is globally unique, we don't worry about deleting unexpceted data.
-        uint32_t loadDroppedPrefixes(rocksdb::Iterator* iter, const std::vector<rocksdb::ColumnFamilyHandle*>);
+        uint32_t loadDroppedPrefixes(rocksdb::Iterator* iter,
+                                     const std::vector<rocksdb::ColumnFamilyHandle*>);
         Status dropPrefixesAtomic(rocksdb::ColumnFamilyHandle* cf,
                                   const std::vector<std::string>& prefixesToDrop,
-                                  rocksdb::TOTransaction* txn,
-                                  const BSONObj& debugInfo);
+                                  rocksdb::TOTransaction* txn, const BSONObj& debugInfo);
         void notifyCompacted(const std::string& begin, const std::string& end, bool rangeDropped,
                              bool opSucceeded);
 

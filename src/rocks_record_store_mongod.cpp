@@ -29,8 +29,6 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
-
 #include <mutex>
 #include <set>
 
@@ -46,10 +44,10 @@
 #include "mongo/db/operation_context.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/session_txn_record_gen.h"
+#include "mongo/platform/basic.h"
 #include "mongo/util/background.h"
 #include "mongo/util/exit.h"
 #include "mongo/util/log.h"
-
 #include "rocks_engine.h"
 #include "rocks_record_store.h"
 #include "rocks_recovery_unit.h"
@@ -103,12 +101,12 @@ namespace mongo {
                 try {
                     const Timestamp oldestPreparedTxnTs = getoldestPrepareTs(opCtx.get());
                     // A Global IX lock should be good enough to protect the oplog truncation from
-                    // interruptions such as restartCatalog. PBWM, database lock or collection lock is not
-                    // needed. This improves concurrency if oplog truncation takes long time.
+                    // interruptions such as restartCatalog. PBWM, database lock or collection lock
+                    // is not needed. This improves concurrency if oplog truncation takes long time.
                     ShouldNotConflictWithSecondaryBatchApplicationBlock shouldNotConflictBlock(
                         opCtx.get()->lockState());
                     Lock::GlobalLock lk(opCtx.get(), MODE_IX);
-        
+
                     RocksRecordStore* rs = nullptr;
                     {
                         // Release the database lock right away because we don't want to
@@ -122,9 +120,9 @@ namespace mongo {
                             LOG(2) << "no local database yet";
                             return false;
                         }
-                        // We need to hold the database lock while getting the collection. Otherwise a
-                        // concurrent collection creation would write to the map in the Database object
-                        // while we concurrently read the map.
+                        // We need to hold the database lock while getting the collection. Otherwise
+                        // a concurrent collection creation would write to the map in the Database
+                        // object while we concurrently read the map.
                         Collection* collection = db->getCollection(opCtx.get(), _ns);
                         if (!collection) {
                             LOG(2) << "no collection " << _ns;

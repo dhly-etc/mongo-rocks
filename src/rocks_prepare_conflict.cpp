@@ -29,8 +29,9 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
 #include "rocks_prepare_conflict.h"
+
+#include "mongo/platform/basic.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/log.h"
 

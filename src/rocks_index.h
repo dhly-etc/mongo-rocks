@@ -26,23 +26,22 @@
  *    it in the license file.
  */
 
-#include "mongo/db/storage/sorted_data_interface.h"
+#include <rocksdb/db.h>
 
 #include <atomic>
 #include <string>
 
-#include <rocksdb/db.h>
-
 #include "mongo/bson/ordering.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/storage/key_string.h"
+#include "mongo/db/storage/sorted_data_interface.h"
 
 #pragma once
 
 namespace rocksdb {
     class DB;
     class ColumnFamilyHandle;
-}
+}  // namespace rocksdb
 
 namespace mongo {
 
@@ -82,7 +81,7 @@ namespace mongo {
 
         rocksdb::DB* _db;  // not owned
 
-        rocksdb::ColumnFamilyHandle* _cf; // not owned
+        rocksdb::ColumnFamilyHandle* _cf;  // not owned
 
         // Each key in the index is prefixed with _prefix
         std::string _prefix;

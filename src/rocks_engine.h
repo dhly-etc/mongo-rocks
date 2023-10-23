@@ -29,22 +29,20 @@
 
 #pragma once
 
-#include <list>
-#include <map>
-#include <memory>
-#include <string>
-
-#include <boost/optional.hpp>
-
 #include <rocksdb/cache.h>
 #include <rocksdb/rate_limiter.h>
 #include <rocksdb/statistics.h>
 #include <rocksdb/status.h>
 
+#include <boost/optional.hpp>
+#include <list>
+#include <map>
+#include <memory>
+#include <string>
+
 #include "mongo/bson/ordering.h"
 #include "mongo/db/storage/kv/kv_engine.h"
 #include "mongo/util/string_map.h"
-
 #include "rocks_compaction_scheduler.h"
 #include "rocks_counter_manager.h"
 #include "rocks_durability_manager.h"
@@ -238,7 +236,7 @@ namespace mongo {
         Timestamp getOldestTimestamp() const override;
         Timestamp getCheckpointTimestamp() const override;
         Timestamp getInitialDataTimestamp() const;
-    
+
         /**
          * Returns the minimum possible Timestamp value in the oplog that replication may need for
          * recovery in the event of a crash. This value gets updated every time a checkpoint is
@@ -278,7 +276,7 @@ namespace mongo {
         rocksdb::ColumnFamilyHandle* getDefaultCf_ForTest() const { return _defaultCf.get(); }
         rocksdb::ColumnFamilyHandle* getOplogCf_ForTest() const { return _oplogCf.get(); }
         rocksdb::ColumnFamilyHandle* getCf_ForTest(const std::string& ns) const {
-            return NamespaceString::oplog(ns)? getOplogCf_ForTest() : getDefaultCf_ForTest();
+            return NamespaceString::oplog(ns) ? getOplogCf_ForTest() : getDefaultCf_ForTest();
         }
 
     private:

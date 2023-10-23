@@ -28,24 +28,7 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
-
 #include "rocks_compaction_scheduler.h"
-
-#include <queue>
-
-#include "mongo/db/client.h"
-#include "mongo/platform/mutex.h"
-#include "mongo/stdx/condition_variable.h"
-#include "mongo/util/assert_util.h"
-#include "mongo/util/background.h"
-#include "mongo/util/concurrency/idle_thread_block.h"
-#include "mongo/util/concurrency/notification.h"
-#include "mongo/util/log.h"
-#include "mongo/util/fail_point.h"
-#include "mongo/util/fail_point_service.h"
-#include "rocks_util.h"
-#include "rocks_record_store.h"
 
 #include <rocksdb/compaction_filter.h>
 #include <rocksdb/convenience.h>
@@ -53,8 +36,24 @@
 #include <rocksdb/experimental.h>
 #include <rocksdb/slice.h>
 #include <rocksdb/write_batch.h>
+
+#include <queue>
+
+#include "mongo/db/client.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
+#include "mongo/platform/basic.h"
+#include "mongo/platform/mutex.h"
+#include "mongo/stdx/condition_variable.h"
+#include "mongo/util/assert_util.h"
+#include "mongo/util/background.h"
+#include "mongo/util/concurrency/idle_thread_block.h"
+#include "mongo/util/concurrency/notification.h"
+#include "mongo/util/fail_point.h"
+#include "mongo/util/fail_point_service.h"
+#include "mongo/util/log.h"
+#include "rocks_record_store.h"
+#include "rocks_util.h"
 
 namespace mongo {
     namespace {
@@ -69,7 +68,7 @@ namespace mongo {
 
         MONGO_FAIL_POINT_DEFINE(RocksCompactionSchedulerPause);
 
-        class OplogCompactionFilter: public rocksdb::CompactionFilter {
+        class OplogCompactionFilter : public rocksdb::CompactionFilter {
         public:
             explicit OplogCompactionFilter(const std::string& from, const std::string& until,
                                            RocksCompactionScheduler* compactionScheduler)
@@ -153,7 +152,8 @@ namespace mongo {
             virtual std::unique_ptr<rocksdb::CompactionFilter> CreateCompactionFilter(
                 const rocksdb::CompactionFilter::Context& context) override {
                 auto oplogDelUntil = _compactionScheduler->getOplogDeleteUntil();
-                if (oplogDelUntil != boost::none && oplogDelUntil->first == context.column_family_id) {
+                if (oplogDelUntil != boost::none &&
+                    oplogDelUntil->first == context.column_family_id) {
                     if (!context.is_manual_compaction) {
                         return std::unique_ptr<rocksdb::CompactionFilter>(nullptr);
                     }
@@ -242,7 +242,8 @@ namespace mongo {
             while (!_compactionQueue.empty()) {
                 auto task = _compactionQueue.top();
                 if (task._notification != boost::none) {
-                    (*task._notification)->set(Status(ErrorCodes::ShutdownInProgress, "compact Q shutting down"));
+                    (*task._notification)
+                        ->set(Status(ErrorCodes::ShutdownInProgress, "compact Q shutting down"));
                 }
                 _compactionQueue.pop();
             }
@@ -322,8 +323,8 @@ namespace mongo {
         const bool isOplog = NamespaceString::oplog(op._cf->GetName());
         LOG(1) << "Starting compaction of cf: " << op._cf->GetName()
                << " range: " << (start ? start->ToString(true) : "<begin>") << " .. "
-               << (end ? end->ToString(true) : "<end>") 
-               << " (rangeDropped is " << op._rangeDropped << ")"
+               << (end ? end->ToString(true) : "<end>") << " (rangeDropped is " << op._rangeDropped
+               << ")"
                << " (isOplog is " << isOplog << ")";
 
         if (op._rangeDropped || isOplog) {
@@ -367,7 +368,8 @@ namespace mongo {
                 char start_ts_buf[sizeof(rocksdb::RocksTimeStamp)];
                 char end_ts_buf[sizeof(rocksdb::RocksTimeStamp)];
                 Encoder(start_ts_buf, sizeof(rocksdb::RocksTimeStamp)).put64(0);
-                Encoder(end_ts_buf, sizeof(rocksdb::RocksTimeStamp)).put64(mongo::Timestamp::max().asULL());
+                Encoder(end_ts_buf, sizeof(rocksdb::RocksTimeStamp))
+                    .put64(mongo::Timestamp::max().asULL());
                 std::string start_str(op._start_str);
                 std::string end_str(op._end_str);
                 start_str.append(start_ts_buf, sizeof(rocksdb::RocksTimeStamp));
@@ -391,10 +393,9 @@ namespace mongo {
                     for (const auto& f : beforeDelFiles) {
                         invariant(NamespaceString::oplog(f.column_family_name));
 
-                        auto vit = std::find_if(afterDelFiles.begin(), afterDelFiles.end(),
-                                                [&](const rocksdb::LiveFileMetaData& a) {
-                                                    return a.name == f.name;
-                                                });
+                        auto vit = std::find_if(
+                            afterDelFiles.begin(), afterDelFiles.end(),
+                            [&](const rocksdb::LiveFileMetaData& a) { return a.name == f.name; });
 
                         // not found
                         if (vit == afterDelFiles.end()) {
@@ -420,13 +421,12 @@ namespace mongo {
         }
 
         rocksdb::CompactRangeOptions compact_options;
-        compact_options.bottommost_level_compaction =
-            rocksdb::BottommostLevelCompaction::kForce;
+        compact_options.bottommost_level_compaction = rocksdb::BottommostLevelCompaction::kForce;
         // if auto-compaction runs parallelly, oplog compact-range may leave a hole.
         compact_options.exclusive_manual_compaction = isOplog;
 
         s = _db->CompactRange(compact_options, op._cf, start, end);
-        
+
         if (!s.ok()) {
             log() << "Failed to compact range: " << s.ToString();
             if (op._notification != boost::none) {
@@ -462,8 +462,8 @@ namespace mongo {
 
     void RocksCompactionScheduler::stop() { _compactionJob.reset(); }
 
-    void RocksCompactionScheduler::reportSkippedDeletionsAboveThreshold(rocksdb::ColumnFamilyHandle* cf,
-                                                                        const std::string& prefix) {
+    void RocksCompactionScheduler::reportSkippedDeletionsAboveThreshold(
+        rocksdb::ColumnFamilyHandle* cf, const std::string& prefix) {
         bool schedule = false;
         {
             stdx::lock_guard<Latch> lk(_lock);
@@ -473,10 +473,8 @@ namespace mongo {
             }
         }
         if (schedule) {
-            log() << "Scheduling compaction to clean up tombstones for cf: "
-                  << cf->GetName()
-                  << ", prefix: "
-                  << rocksdb::Slice(prefix).ToString(true);
+            log() << "Scheduling compaction to clean up tombstones for cf: " << cf->GetName()
+                  << ", prefix: " << rocksdb::Slice(prefix).ToString(true);
             // we schedule compaction now (ignoring error)
             compactPrefix(cf, prefix);
         }
@@ -490,11 +488,12 @@ namespace mongo {
     void RocksCompactionScheduler::compactAll() {
         // NOTE(wolfkdy): compactAll only compacts DefaultColumnFamily
         // oplog cf is handled in RocksRecordStore.
-        compact(_db->DefaultColumnFamily(), std::string(), std::string(), false, kOrderFull, boost::none);
+        compact(_db->DefaultColumnFamily(), std::string(), std::string(), false, kOrderFull,
+                boost::none);
     }
 
     Status RocksCompactionScheduler::compactOplog(rocksdb::ColumnFamilyHandle* cf,
-                                                  const std::string& begin, 
+                                                  const std::string& begin,
                                                   const std::string& end) {
         {
             stdx::lock_guard<Latch> lk(_droppedDataMutex);
@@ -513,7 +512,8 @@ namespace mongo {
         return s;
     }
 
-    void RocksCompactionScheduler::compactPrefix(rocksdb::ColumnFamilyHandle* cf, const std::string& prefix) {
+    void RocksCompactionScheduler::compactPrefix(rocksdb::ColumnFamilyHandle* cf,
+                                                 const std::string& prefix) {
         compact(cf, prefix, rocksGetNextPrefix(prefix), false, kOrderRange, boost::none);
     }
 
@@ -526,7 +526,7 @@ namespace mongo {
 
     void RocksCompactionScheduler::compact(
         rocksdb::ColumnFamilyHandle* cf, const std::string& begin, const std::string& end,
-        bool rangeDropped, uint32_t order, 
+        bool rangeDropped, uint32_t order,
         boost::optional<std::shared_ptr<Notification<Status>>> notification) {
         _compactionJob->scheduleCompactOp(cf, begin, end, rangeDropped, order, notification);
     }
@@ -540,14 +540,14 @@ namespace mongo {
         // this will copy the set. that way compaction filter has its own copy and doesn't need to
         // worry about thread safety
         std::unordered_map<uint32_t, BSONObj> ret;
-        for(auto p : _droppedPrefixes) {
-          ret.emplace(p.first, p.second.copy());
+        for (auto p : _droppedPrefixes) {
+            ret.emplace(p.first, p.second.copy());
         }
         return ret;
     }
 
-    uint32_t RocksCompactionScheduler::loadDroppedPrefixes(rocksdb::Iterator* iter,
-                                                           std::vector<rocksdb::ColumnFamilyHandle*> cfs) {
+    uint32_t RocksCompactionScheduler::loadDroppedPrefixes(
+        rocksdb::Iterator* iter, std::vector<rocksdb::ColumnFamilyHandle*> cfs) {
         invariant(iter);
         const uint32_t rocksdbSkippedDeletionsInitial =
             (uint32_t)get_internal_delete_skipped_count();
@@ -580,16 +580,15 @@ namespace mongo {
         return int_prefix;
     }
 
-    boost::optional<std::pair<uint32_t, std::pair<std::string, std::string>>> RocksCompactionScheduler::getOplogDeleteUntil() const {
+    boost::optional<std::pair<uint32_t, std::pair<std::string, std::string>>>
+    RocksCompactionScheduler::getOplogDeleteUntil() const {
         stdx::lock_guard<Latch> lk(_droppedDataMutex);
         return _oplogDeleteUntil;
     }
 
     Status RocksCompactionScheduler::dropPrefixesAtomic(
-        rocksdb::ColumnFamilyHandle* cf,
-        const std::vector<std::string>& prefixesToDrop,
-        rocksdb::TOTransaction* txn,
-        const BSONObj& debugInfo) {
+        rocksdb::ColumnFamilyHandle* cf, const std::vector<std::string>& prefixesToDrop,
+        rocksdb::TOTransaction* txn, const BSONObj& debugInfo) {
         // We record the fact that we're deleting this prefix. That way we ensure that the prefix is
         // always deleted
         for (const auto& prefix : prefixesToDrop) {

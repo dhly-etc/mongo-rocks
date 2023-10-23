@@ -28,9 +28,6 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
-#include "mongo/platform/endian.h"
-
 #include "rocks_counter_manager.h"
 
 #include <atomic>
@@ -38,12 +35,15 @@
 #include <memory>
 #include <string>
 
+#include "mongo/platform/basic.h"
+#include "mongo/platform/endian.h"
+
 // for invariant()
 #include <rocksdb/db.h>
+
 #include "mongo/platform/mutex.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
-
 #include "rocks_util.h"
 
 namespace mongo {
@@ -106,7 +106,8 @@ namespace mongo {
         auto txn = _db->makeTxn();
         int64_t storage;
         for (const auto& counter : _counters) {
-            invariantRocksOK(txn->Put(_cf, counter.first, _encodeCounter(counter.second, &storage)));
+            invariantRocksOK(
+                txn->Put(_cf, counter.first, _encodeCounter(counter.second, &storage)));
         }
         _counters.clear();
         _syncCounter = 0;

@@ -11,212 +11,211 @@
 
 namespace rocksdb {
 
-// PrepareFilterIterator
-//   |
-//   --PrepareMergingIterator
-//       |
-//       -- PrepareMapIterator
-//       |
-//       -- BaseIterator
-//            |
-//            -- WriteBatchWithIndexIterator
-//            |
-//            -- Normal LsmTree Iterator
-//                 |
-//                 -- ......
-//
-// 1) `PrepareFilterIterator` checks prepare status of an input entry and
-// decides
-// to return, wait, or advance to the next record
-// 2) PrepareMergingIterator arranges PrepareMapIterator and BaseIterator into
-// total-order. if PrepareMapIterator and BaseIterator has the same key, they
-// are both returned by `ShadowValue`, it is impossible that the same key
-// comes from me(or WriteBatchWithIndexIterator) because the only operations
-// after `prepare` is rollback or commit
+    // PrepareFilterIterator
+    //   |
+    //   --PrepareMergingIterator
+    //       |
+    //       -- PrepareMapIterator
+    //       |
+    //       -- BaseIterator
+    //            |
+    //            -- WriteBatchWithIndexIterator
+    //            |
+    //            -- Normal LsmTree Iterator
+    //                 |
+    //                 -- ......
+    //
+    // 1) `PrepareFilterIterator` checks prepare status of an input entry and
+    // decides
+    // to return, wait, or advance to the next record
+    // 2) PrepareMergingIterator arranges PrepareMapIterator and BaseIterator into
+    // total-order. if PrepareMapIterator and BaseIterator has the same key, they
+    // are both returned by `ShadowValue`, it is impossible that the same key
+    // comes from me(or WriteBatchWithIndexIterator) because the only operations
+    // after `prepare` is rollback or commit
 
-class PrepareMapIterator {
- public:
-  PrepareMapIterator(ColumnFamilyHandle* cf, PrepareHeap* ph,
-                     TOTransactionImpl::ActiveTxnNode* core)
-      : cf_(cf), ph_(ph), core_(core), valid_(false) {}
+    class PrepareMapIterator {
+    public:
+        PrepareMapIterator(ColumnFamilyHandle* cf, PrepareHeap* ph,
+                           TOTransactionImpl::ActiveTxnNode* core)
+            : cf_(cf), ph_(ph), core_(core), valid_(false) {}
 
-  bool Valid() const { return valid_; }
+        bool Valid() const { return valid_; }
 
-  void SeekToFirst();
+        void SeekToFirst();
 
-  void SeekToLast();
+        void SeekToLast();
 
-  void Seek(const Slice& target);
+        void Seek(const Slice& target);
 
-  void SeekForPrev(const Slice& target);
+        void SeekForPrev(const Slice& target);
 
-  void Next();
+        void Next();
 
-  void Prev();
+        void Prev();
 
-  Slice key() const;
+        Slice key() const;
 
-  const std::shared_ptr<TOTransactionImpl::ActiveTxnNode>& value() const;
+        const std::shared_ptr<TOTransactionImpl::ActiveTxnNode>& value() const;
 
-  TOTransaction::TOTransactionState valueState() const;
+        TOTransaction::TOTransactionState valueState() const;
 
-  TOTransaction::TOTransactionState UpdatePrepareState();
+        TOTransaction::TOTransactionState UpdatePrepareState();
 
-  PrepareHeap* getPrepareHeapMap() const;
+        PrepareHeap* getPrepareHeapMap() const;
 
- private:
-  void TryPosValueToCorrectMvccVersionInLock(
-      const std::list<std::shared_ptr<TOTransactionImpl::ActiveTxnNode>>&
-          prepare_mvccs);
+    private:
+        void TryPosValueToCorrectMvccVersionInLock(
+            const std::list<std::shared_ptr<TOTransactionImpl::ActiveTxnNode>>& prepare_mvccs);
 
-  ColumnFamilyHandle* cf_;  // not owned
+        ColumnFamilyHandle* cf_;  // not owned
 
-  PrepareHeap* ph_;  // not owned
+        PrepareHeap* ph_;  // not owned
 
-  TOTransactionImpl::ActiveTxnNode* core_;  // not owned
+        TOTransactionImpl::ActiveTxnNode* core_;  // not owned
 
-  bool forward_;
+        bool forward_;
 
-  bool valid_;
+        bool valid_;
 
-  std::string pos_;
+        std::string pos_;
 
-  std::shared_ptr<TOTransactionImpl::ActiveTxnNode> val_;
+        std::shared_ptr<TOTransactionImpl::ActiveTxnNode> val_;
 
-  TOTransaction::TOTransactionState val_state_;
-};
+        TOTransaction::TOTransactionState val_state_;
+    };
 
-struct ShadowValue {
-  bool has_prepare;
-  bool has_base;
-  TOTransactionImpl::ActiveTxnNode* prepare_value;
-  TOTransaction::TOTransactionState prepare_value_state;
-  Slice base_value;
-  Slice base_key;
-  RocksTimeStamp base_timestamp;
-};
+    struct ShadowValue {
+        bool has_prepare;
+        bool has_base;
+        TOTransactionImpl::ActiveTxnNode* prepare_value;
+        TOTransaction::TOTransactionState prepare_value_state;
+        Slice base_value;
+        Slice base_key;
+        RocksTimeStamp base_timestamp;
+    };
 
-class PrepareMergingIterator {
- public:
-  PrepareMergingIterator(std::unique_ptr<Iterator> base_iterator,
-                         std::unique_ptr<PrepareMapIterator> pmap_iterator);
+    class PrepareMergingIterator {
+    public:
+        PrepareMergingIterator(std::unique_ptr<Iterator> base_iterator,
+                               std::unique_ptr<PrepareMapIterator> pmap_iterator);
 
-  bool Valid() const;
+        bool Valid() const;
 
-  Slice key() const;
+        Slice key() const;
 
-  ShadowValue value() const;
+        ShadowValue value() const;
 
-  void SeekToFirst();
+        void SeekToFirst();
 
-  void SeekToLast();
+        void SeekToLast();
 
-  void Seek(const Slice& k);
+        void Seek(const Slice& k);
 
-  void SeekForPrev(const Slice& k);
+        void SeekForPrev(const Slice& k);
 
-  void Next();
+        void Next();
 
-  void Prev();
+        void Prev();
 
-  Status status() const;
+        Status status() const;
 
-  TOTransaction::TOTransactionState UpdatePrepareState();
+        TOTransaction::TOTransactionState UpdatePrepareState();
 
- private:
-  void Advance();
+    private:
+        void Advance();
 
-  void AdvanceDelta();
+        void AdvanceDelta();
 
-  void AdvanceBase();
+        void AdvanceBase();
 
-  void AssertInvariants();
+        void AssertInvariants();
 
-  void UpdateCurrent();
+        void UpdateCurrent();
 
-  bool BaseValid() const;
+        bool BaseValid() const;
 
-  bool DeltaValid() const;
+        bool DeltaValid() const;
 
-  bool forward_;
+        bool forward_;
 
-  bool current_at_base_;
+        bool current_at_base_;
 
-  bool equal_keys_;
+        bool equal_keys_;
 
-  Status status_;
+        Status status_;
 
-  std::unique_ptr<Iterator> base_iterator_;
+        std::unique_ptr<Iterator> base_iterator_;
 
-  std::unique_ptr<PrepareMapIterator> delta_iterator_;
+        std::unique_ptr<PrepareMapIterator> delta_iterator_;
 
-  const Comparator* comparator_;  // not owned
-};
+        const Comparator* comparator_;  // not owned
+    };
 
-class PrepareFilterIterator : public Iterator {
- public:
-  PrepareFilterIterator(DB* db, ColumnFamilyHandle* cf,
-                        const std::shared_ptr<TOTransactionImpl::ActiveTxnNode>& core,
-                        std::unique_ptr<PrepareMergingIterator> input,
-                        Logger* info_log = nullptr);
+    class PrepareFilterIterator : public Iterator {
+    public:
+        PrepareFilterIterator(DB* db, ColumnFamilyHandle* cf,
+                              const std::shared_ptr<TOTransactionImpl::ActiveTxnNode>& core,
+                              std::unique_ptr<PrepareMergingIterator> input,
+                              Logger* info_log = nullptr);
 
-  bool Valid() const final;
+        bool Valid() const final;
 
-  Slice key() const final;
+        Slice key() const final;
 
-  Slice value() const final;
+        Slice value() const final;
 
-  void SeekToFirst() final;
+        void SeekToFirst() final;
 
-  void SeekToLast() final;
+        void SeekToLast() final;
 
-  void Seek(const Slice& k) final;
+        void Seek(const Slice& k) final;
 
-  void SeekForPrev(const Slice& k) final;
+        void SeekForPrev(const Slice& k) final;
 
-  void Next() final;
+        void Next() final;
 
-  void Prev() final;
+        void Prev() final;
 
-  Status status() const;
+        Status status() const;
 
- private:
-  // rocksdb internal api, for sanity check
-  // WBWIIteratorImpl::Result GetFromBatch(WriteBatchWithIndex* batch,
-  //                                       const Slice& key,
-  //                                       std::string* val);
+    private:
+        // rocksdb internal api, for sanity check
+        // WBWIIteratorImpl::Result GetFromBatch(WriteBatchWithIndex* batch,
+        //                                       const Slice& key,
+        //                                       std::string* val);
 
-  void AdvanceInputNoFilter();
+        void AdvanceInputNoFilter();
 
-  void UpdateCurrent();
+        void UpdateCurrent();
 
-  void UpdatePrepareState();
+        void UpdatePrepareState();
 
-  DB* db_;
+        DB* db_;
 
-  ColumnFamilyHandle* cf_;
+        ColumnFamilyHandle* cf_;
 
-  // Iterator's lifetime should be shorter than the Transaction who created it.
-  // So here core_ should be a raw pointer rather than shared_ptr. However,
-  // MultiIndexBlock::insertAllDocumentsInCollection breaks this. The cursor
-  // in exec has longer lifetime than WriteUnitOfWork, so we have to workaround
-  // with shared_ptr.
-  std::shared_ptr<TOTransactionImpl::ActiveTxnNode> core_;
+        // Iterator's lifetime should be shorter than the Transaction who created it.
+        // So here core_ should be a raw pointer rather than shared_ptr. However,
+        // MultiIndexBlock::insertAllDocumentsInCollection breaks this. The cursor
+        // in exec has longer lifetime than WriteUnitOfWork, so we have to workaround
+        // with shared_ptr.
+        std::shared_ptr<TOTransactionImpl::ActiveTxnNode> core_;
 
-  std::unique_ptr<PrepareMergingIterator> input_;
+        std::unique_ptr<PrepareMergingIterator> input_;
 
-  Slice key_;
+        Slice key_;
 
-  std::string val_;
+        std::string val_;
 
-  ShadowValue sval_;
+        ShadowValue sval_;
 
-  bool valid_;
+        bool valid_;
 
-  bool forward_;
+        bool forward_;
 
-  Status status_;
-};
+        Status status_;
+    };
 
 }  //  namespace rocksdb
 

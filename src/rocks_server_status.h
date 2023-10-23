@@ -52,6 +52,7 @@ namespace mongo {
         virtual void generateOplogDelStatsSection(BSONObjBuilder* bob) const;
         virtual void generateCompactSchedulerSection(BSONObjBuilder* bob) const;
         virtual void generateDefaultCFEntriesNumSection(BSONObjBuilder* bob) const;
+
     private:
         RocksEngine* _engine;
     };

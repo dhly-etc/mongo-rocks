@@ -26,25 +26,24 @@
  *    it in the license file.
  */
 
-#include "mongo/platform/basic.h"
-
-#include <boost/filesystem/operations.hpp>
-#include <string>
+#include "rocks_index.h"
 
 #include <rocksdb/comparator.h>
 #include <rocksdb/db.h>
 #include <rocksdb/options.h>
 #include <rocksdb/slice.h>
 
+#include <boost/filesystem/operations.hpp>
+#include <string>
+
 #include "mongo/base/init.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/storage/sorted_data_interface_test_harness.h"
+#include "mongo/platform/basic.h"
 #include "mongo/stdx/memory.h"
 #include "mongo/unittest/temp_dir.h"
 #include "mongo/unittest/unittest.h"
-
 #include "rocks_engine.h"
-#include "rocks_index.h"
 #include "rocks_recovery_unit.h"
 #include "rocks_snapshot_manager.h"
 

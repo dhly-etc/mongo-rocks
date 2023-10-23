@@ -32,9 +32,10 @@
 #include "rocks_util.h"
 
 #include <rocksdb/status.h>
-#include <string>
 #include <stdarg.h>
 #include <stdio.h>
+
+#include <string>
 
 // Temporary fix for https://github.com/facebook/rocksdb/pull/2336#issuecomment-303226208
 #define ROCKSDB_SUPPORT_THREAD_LOCAL

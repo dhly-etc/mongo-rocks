@@ -30,7 +30,9 @@
 
 #include <rocksdb/env.h>
 #include <rocksdb/status.h>
+
 #include <string>
+
 #include "mongo/util/assert_util.h"
 
 namespace mongo {

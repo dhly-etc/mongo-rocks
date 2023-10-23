@@ -26,16 +26,15 @@
  *    it in the license file.
  */
 
+#include <rocksdb/db.h>
+
 #include <forward_list>
 
-#include <rocksdb/db.h>
 #include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
-
 #include "mongo/db/storage/recovery_unit.h"
 #include "mongo/db/storage/snapshot_manager.h"
 #include "mongo/platform/mutex.h"
-
 #include "rocks_begin_transaction_block.h"
 
 #pragma once

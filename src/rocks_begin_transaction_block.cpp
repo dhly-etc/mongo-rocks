@@ -30,7 +30,9 @@
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
 #include "rocks_begin_transaction_block.h"
+
 #include <cstdio>
+
 #include "mongo/platform/basic.h"
 #include "mongo/util/log.h"
 #include "rocks_util.h"
@@ -80,8 +82,8 @@ namespace mongo {
         if (!status.ok()) {
             if (status.IsInvalidArgument()) {
                 return Status(ErrorCodes::SnapshotTooOld,
-                      str::stream() << "Read timestamp " << ts
-                                    << " is older than the oldest available timestamp.");
+                              str::stream() << "Read timestamp " << ts
+                                            << " is older than the oldest available timestamp.");
             }
             return rocksToMongoStatus(status);
         }

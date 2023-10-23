@@ -28,9 +28,11 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
-
 #include "rocks_index.h"
+
+#include <rocksdb/db.h>
+#include <rocksdb/iterator.h>
+#include <rocksdb/utilities/write_batch_with_index.h>
 
 #include <cstdlib>
 #include <memory>
@@ -38,18 +40,14 @@
 #include <string>
 #include <vector>
 
-#include <rocksdb/db.h>
-#include <rocksdb/iterator.h>
-#include <rocksdb/utilities/write_batch_with_index.h>
-
 #include "mongo/base/checked_cast.h"
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/storage/index_entry_comparison.h"
+#include "mongo/platform/basic.h"
 #include "mongo/stdx/memory.h"
 #include "mongo/util/log.h"
 #include "mongo/util/str.h"
-
 #include "rocks_engine.h"
 #include "rocks_prepare_conflict.h"
 #include "rocks_record_store.h"
@@ -232,7 +230,7 @@ namespace mongo {
             if (cmp != 0) {
                 if (!_previousKey.isEmpty()) {  // _previousKey.isEmpty() is only true on the first
                                                 // call to addKey().
-                    invariant(cmp > 0);  // newKey must be > the last key
+                    invariant(cmp > 0);         // newKey must be > the last key
                     // We are done with dups of the last key so we can insert it now.
                     specialFormatInserted = doInsert();
                 }
@@ -319,9 +317,9 @@ namespace mongo {
          */
         class RocksCursorBase : public SortedDataInterface::Cursor {
         public:
-            RocksCursorBase(OperationContext* opCtx, rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf,
-                            std::string prefix,
-                            bool forward, Ordering order, KeyString::Version keyStringVersion)
+            RocksCursorBase(OperationContext* opCtx, rocksdb::DB* db,
+                            rocksdb::ColumnFamilyHandle* cf, std::string prefix, bool forward,
+                            Ordering order, KeyString::Version keyStringVersion)
                 : _db(db),
                   _cf(cf),
                   _prefix(prefix),
@@ -570,7 +568,7 @@ namespace mongo {
                 return rocksdb::Slice(_iterator->value());
             }
 
-            rocksdb::DB* _db;  // not owned
+            rocksdb::DB* _db;                  // not owned
             rocksdb::ColumnFamilyHandle* _cf;  // not owned
             std::string _prefix;
             std::unique_ptr<RocksIterator> _iterator;
@@ -600,9 +598,9 @@ namespace mongo {
 
         class RocksStandardCursor final : public RocksCursorBase {
         public:
-            RocksStandardCursor(OperationContext* opCtx, rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf,
-                                std::string prefix,
-                                bool forward, Ordering order, KeyString::Version keyStringVersion)
+            RocksStandardCursor(OperationContext* opCtx, rocksdb::DB* db,
+                                rocksdb::ColumnFamilyHandle* cf, std::string prefix, bool forward,
+                                Ordering order, KeyString::Version keyStringVersion)
                 : RocksCursorBase(opCtx, db, cf, prefix, forward, order, keyStringVersion) {
                 iterator();
             }
@@ -630,7 +628,8 @@ namespace mongo {
                 _query.resetToKey(stripFieldNames(key), _order);
                 prefixedKey.append(_query.getBuffer(), _query.getSize());
                 rocksdb::Status status = rocksPrepareConflictRetry(_opCtx, [&] {
-                    return RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx)->Get(_cf, prefixedKey, &_value);
+                    return RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx)->Get(_cf, prefixedKey,
+                                                                                &_value);
                 });
 
                 if (status.IsNotFound()) {
@@ -818,8 +817,8 @@ namespace mongo {
                                     std::memory_order_relaxed);
 
         std::string currentValue;
-        auto getStatus =
-            rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(_cf, prefixedKey, &currentValue); });
+        auto getStatus = rocksPrepareConflictRetry(
+            opCtx, [&] { return ru->Get(_cf, prefixedKey, &currentValue); });
 
         if (getStatus.IsNotFound()) {
             // nothing here. just insert the value
@@ -865,8 +864,7 @@ namespace mongo {
         }
 
         if (!dupsAllowed) {
-            return buildDupKeyErrorStatus(key,
-                                          NamespaceString(StringData(_collectionNamespace)),
+            return buildDupKeyErrorStatus(key, NamespaceString(StringData(_collectionNamespace)),
                                           _indexName, _keyPattern);
         }
 
@@ -930,8 +928,8 @@ namespace mongo {
             if (_partial) {
                 // Check that the record id matches.  We may be called to unindex records that are
                 // not present in the index due to the partial filter expression.
-                auto s =
-                    rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(_cf, prefixedKey, &tmpVal); });
+                auto s = rocksPrepareConflictRetry(
+                    opCtx, [&] { return ru->Get(_cf, prefixedKey, &tmpVal); });
                 if (s.IsNotFound()) {
                     // NOTE(wolfkdy): SERVER-28546
                     triggerWriteConflictAtPoint();
@@ -955,8 +953,8 @@ namespace mongo {
 
         // dups are allowed, so we have to deal with a vector of RecordIds.
         std::string currentValue;
-        auto getStatus =
-            rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(_cf, prefixedKey, &currentValue); });
+        auto getStatus = rocksPrepareConflictRetry(
+            opCtx, [&] { return ru->Get(_cf, prefixedKey, &currentValue); });
         if (getStatus.IsNotFound()) {
             // NOTE(wolfkdy): SERVER-28546
             triggerWriteConflictAtPoint();
@@ -1050,8 +1048,7 @@ namespace mongo {
         }
 
         if (records > 1) {
-            return buildDupKeyErrorStatus(key,
-                                          NamespaceString(StringData(_collectionNamespace)),
+            return buildDupKeyErrorStatus(key, NamespaceString(StringData(_collectionNamespace)),
                                           _indexName, _keyPattern);
         }
         return Status::OK();

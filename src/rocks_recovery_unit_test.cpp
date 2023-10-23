@@ -26,18 +26,16 @@
  *    it in the license file.
  */
 
-#include "mongo/platform/basic.h"
-
-#include <boost/filesystem/operations.hpp>
-#include <memory>
-#include <vector>
+#include "rocks_recovery_unit.h"
 
 #include <rocksdb/comparator.h>
 #include <rocksdb/db.h>
 #include <rocksdb/options.h>
 #include <rocksdb/slice.h>
-#include "mongo/db/modules/rocks/src/totdb/totransaction.h"
-#include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
+
+#include <boost/filesystem/operations.hpp>
+#include <memory>
+#include <vector>
 
 #include "mongo/base/checked_cast.h"
 #include "mongo/base/init.h"
@@ -45,12 +43,15 @@
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/json.h"
+#include "mongo/db/modules/rocks/src/totdb/totransaction.h"
+#include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
 #include "mongo/db/operation_context_noop.h"
 #include "mongo/db/repl/repl_settings.h"
 #include "mongo/db/repl/replication_coordinator_mock.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/storage/kv/kv_prefix.h"
 #include "mongo/db/storage/recovery_unit_test_harness.h"
+#include "mongo/platform/basic.h"
 #include "mongo/stdx/memory.h"
 #include "mongo/unittest/death_test.h"
 #include "mongo/unittest/temp_dir.h"
@@ -58,11 +59,9 @@
 #include "mongo/util/clock_source_mock.h"
 #include "mongo/util/fail_point.h"
 #include "mongo/util/scopeguard.h"
-
 #include "rocks_compaction_scheduler.h"
 #include "rocks_oplog_manager.h"
 #include "rocks_record_store.h"
-#include "rocks_recovery_unit.h"
 #include "rocks_snapshot_manager.h"
 
 namespace mongo {
@@ -91,7 +90,8 @@ namespace mongo {
                                                                const std::string& ns) final {
             RocksRecordStore::Params params;
             params.ns = ns;
-            return stdx::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), opCtx, params);
+            return stdx::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), opCtx,
+                                                       params);
         }
 
     private:

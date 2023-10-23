@@ -27,17 +27,6 @@
  */
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
-
-#include "mongo/db/modules/rocks/src/rocks_parameters_gen.h"
-#include "rocks_util.h"
-
-#include "mongo/db/json.h"
-#include "mongo/logger/parse_log_component_settings.h"
-#include "mongo/util/log.h"
-#include "mongo/util/str.h"
-#include "rocks_global_options.h"
-
 #include <rocksdb/cache.h>
 #include <rocksdb/convenience.h>
 #include <rocksdb/db.h>
@@ -45,6 +34,15 @@
 #include <rocksdb/options.h>
 #include <rocksdb/status.h>
 #include <rocksdb/version.h>
+
+#include "mongo/db/json.h"
+#include "mongo/db/modules/rocks/src/rocks_parameters_gen.h"
+#include "mongo/logger/parse_log_component_settings.h"
+#include "mongo/platform/basic.h"
+#include "mongo/util/log.h"
+#include "mongo/util/str.h"
+#include "rocks_global_options.h"
+#include "rocks_util.h"
 
 namespace mongo {
 

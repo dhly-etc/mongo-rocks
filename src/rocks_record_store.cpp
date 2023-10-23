@@ -29,13 +29,7 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
-
 #include "rocks_record_store.h"
-
-#include <algorithm>
-#include <memory>
-#include <mutex>
 
 #include <rocksdb/comparator.h>
 #include <rocksdb/db.h>
@@ -44,14 +38,20 @@
 #include <rocksdb/slice.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 
+#include <algorithm>
+#include <memory>
+#include <mutex>
+
 #include "mongo/base/checked_cast.h"
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/modules/rocks/src/rocks_parameters_gen.h"
+#include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/operation_context.h"
-#include "mongo/db/storage/oplog_hack.h"
 #include "mongo/db/server_recovery.h"
+#include "mongo/db/storage/oplog_hack.h"
+#include "mongo/platform/basic.h"
 #include "mongo/platform/endian.h"
 #include "mongo/stdx/memory.h"
 #include "mongo/util/assert_util.h"
@@ -59,8 +59,6 @@
 #include "mongo/util/concurrency/idle_thread_block.h"
 #include "mongo/util/log.h"
 #include "mongo/util/str.h"
-
-#include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "rocks_compaction_scheduler.h"
 #include "rocks_counter_manager.h"
 #include "rocks_durability_manager.h"
@@ -84,14 +82,15 @@ namespace mongo {
     MONGO_FAIL_POINT_DEFINE(RocksWriteConflictExceptionForReads);
 
     namespace {
-        AtomicWord<std::uint32_t> minSSTFileCountReserved{4}; 
+        AtomicWord<std::uint32_t> minSSTFileCountReserved{4};
     }
-    ExportedMinSSTFileCountReservedParameter::ExportedMinSSTFileCountReservedParameter(StringData name,
-            ServerParameterType spt)
+    ExportedMinSSTFileCountReservedParameter::ExportedMinSSTFileCountReservedParameter(
+        StringData name, ServerParameterType spt)
         : ServerParameter(name, spt), _data(&minSSTFileCountReserved) {}
-    
-    void ExportedMinSSTFileCountReservedParameter::append(OperationContext* opCtx, BSONObjBuilder& b,
-                                            const std::string& name) {
+
+    void ExportedMinSSTFileCountReservedParameter::append(OperationContext* opCtx,
+                                                          BSONObjBuilder& b,
+                                                          const std::string& name) {
         b.append(name, _data->load());
     }
 
@@ -102,7 +101,8 @@ namespace mongo {
             return status;
         }
         if (num < 1 || num > (1000 * 1000)) {
-            return Status(ErrorCodes::BadValue, "minSSTFileCountReserved must be between 1 and 1 million, inclusive");
+            return Status(ErrorCodes::BadValue,
+                          "minSSTFileCountReserved must be between 1 and 1 million, inclusive");
         }
         _data->store(static_cast<uint32_t>(num));
         return Status::OK();
@@ -169,13 +169,13 @@ namespace mongo {
             _nextIdNum.store(1);
             _dataSize.store(0);
             _numRecords.store(0);
-            if(!_isOplog) {
+            if (!_isOplog) {
                 _counterManager->updateCounter(_numRecordsKey, 0);
                 _counterManager->updateCounter(_dataSizeKey, 0);
-                sizeRecoveryState(getGlobalServiceContext()).markCollectionAsAlwaysNeedsSizeAdjustment(_ident);
+                sizeRecoveryState(getGlobalServiceContext())
+                    .markCollectionAsAlwaysNeedsSizeAdjustment(_ident);
             }
         }
-
 
         _hasBackgroundThread = RocksEngine::initRsOplogBackgroundThread(params.ns);
         invariant(_isOplog == (_oplogManager != nullptr));
@@ -206,8 +206,8 @@ namespace mongo {
     void RocksRecordStore::_loadCountFromCountManager(OperationContext* opCtx) {
         if (_isOplog) {
             long long v = _counterManager->loadCounter(_cappedOldestKey);
-            if(v > 0) {
-                _cappedOldestKeyHint = RecordId(_counterManager->loadCounter(_cappedOldestKey)); 
+            if (v > 0) {
+                _cappedOldestKeyHint = RecordId(_counterManager->loadCounter(_cappedOldestKey));
             }
             return;
         }
@@ -229,8 +229,7 @@ namespace mongo {
         }
         // We need to make it multiple of 256 to make
         // jstests/concurrency/fsm_workloads/convert_to_capped_collection.js happy
-        return static_cast<int64_t>(
-            std::max(size & (~255), static_cast<long long>(256)));
+        return static_cast<int64_t>(std::max(size & (~255), static_cast<long long>(256)));
     }
 
     RecordData RocksRecordStore::dataFor(OperationContext* opCtx, const RecordId& loc) const {
@@ -250,7 +249,8 @@ namespace mongo {
         invariant(txn);
 
         std::string oldValue;
-        auto status = rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(_cf, key, &oldValue); });
+        auto status =
+            rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(_cf, key, &oldValue); });
         invariantRocksOK(status);
         int oldLength = oldValue.size();
 
@@ -262,12 +262,10 @@ namespace mongo {
     long long RocksRecordStore::dataSize(OperationContext* opCtx) const {
         if (_isOplog) {
             uint64_t curSizeAllMemTables = 0, liveSSTTotalSize = 0;
-            invariant(_db->GetRootDB()->GetIntProperty(_cf,
-                                                       rocksdb::Slice("rocksdb.cur-size-all-mem-tables"),
-                                                       &curSizeAllMemTables));
-            invariant(_db->GetRootDB()->GetIntProperty(_cf,
-                                                       rocksdb::Slice("rocksdb.live-sst-files-size"),
-                                                       &liveSSTTotalSize));
+            invariant(_db->GetRootDB()->GetIntProperty(
+                _cf, rocksdb::Slice("rocksdb.cur-size-all-mem-tables"), &curSizeAllMemTables));
+            invariant(_db->GetRootDB()->GetIntProperty(
+                _cf, rocksdb::Slice("rocksdb.live-sst-files-size"), &liveSSTTotalSize));
             return curSizeAllMemTables + liveSSTTotalSize;
         }
         RocksRecoveryUnit* ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
@@ -279,21 +277,19 @@ namespace mongo {
         if (_isOplog) {
             uint64_t cntMem = 0, cntImm = 0;
             int64_t cntSST = 0;
-            invariant(_db->GetRootDB()->GetIntProperty(_cf,
-                                                       rocksdb::Slice("rocksdb.num-entries-active-mem-table"),
-                                                       &cntMem));
-            invariant(_db->GetRootDB()->GetIntProperty(_cf,
-                                                       rocksdb::Slice("rocksdb.num-entries-imm-mem-tables"),
-                                                       &cntImm));
+            invariant(_db->GetRootDB()->GetIntProperty(
+                _cf, rocksdb::Slice("rocksdb.num-entries-active-mem-table"), &cntMem));
+            invariant(_db->GetRootDB()->GetIntProperty(
+                _cf, rocksdb::Slice("rocksdb.num-entries-imm-mem-tables"), &cntImm));
 
             std::vector<rocksdb::LiveFileMetaData> allFiles;
             _db->GetRootDB()->GetLiveFilesMetaData(&allFiles);
             for (const auto& f : allFiles) {
-              if (!NamespaceString::oplog(f.column_family_name)) {
-                continue;
-              }
-              invariant(f.num_entries >= f.num_deletions);
-              cntSST += f.num_entries - f.num_deletions;
+                if (!NamespaceString::oplog(f.column_family_name)) {
+                    continue;
+                }
+                invariant(f.num_entries >= f.num_deletions);
+                cntSST += f.num_entries - f.num_deletions;
             }
             return cntMem + cntImm + cntSST;
         }
@@ -496,8 +492,8 @@ namespace mongo {
             return reclaimOplog(opCtx, Timestamp::max());
         }
         const auto lastStableCheckpointTimestamp = _engine->getLastStableRecoveryTimestamp();
-        return reclaimOplog(opCtx,
-                            lastStableCheckpointTimestamp ? *lastStableCheckpointTimestamp : Timestamp::min());
+        return reclaimOplog(opCtx, lastStableCheckpointTimestamp ? *lastStableCheckpointTimestamp
+                                                                 : Timestamp::min());
     }
 
     bool RocksRecordStore::reclaimOplog(OperationContext* opCtx, Timestamp persistedTimestamp) {
@@ -520,8 +516,8 @@ namespace mongo {
         }
         std::sort(oplogFiles.begin(), oplogFiles.end(),
                   [&](const rocksdb::LiveFileMetaData& a, const rocksdb::LiveFileMetaData& b) {
-            return a.smallestkey < b.smallestkey;
-        });
+                      return a.smallestkey < b.smallestkey;
+                  });
         for (const auto& f : oplogFiles) {
             if (oplogTotalBytes - pendingDelSize > _cappedMaxSize + static_cast<ssize_t>(f.size)) {
                 pendingDelSize += f.size;
@@ -558,15 +554,16 @@ namespace mongo {
             });
             if (!iterator->Valid()) {
                 if (!iterator->status().ok()) {
-                    LOG(0) << "reclaimOplog oplog lookup next " << _prefixedKeyToTimestamp(maxDelKey)
-                           << " failed " << rocksToMongoStatus(iterator->status());
+                    LOG(0) << "reclaimOplog oplog lookup next "
+                           << _prefixedKeyToTimestamp(maxDelKey) << " failed "
+                           << rocksToMongoStatus(iterator->status());
                 }
                 return false;
             }
             LOG(0) << "reclaimOplog update _cappedOldestKeyHint from "
                    << Timestamp(_cappedOldestKeyHint.repr()) << " to "
-                   << Timestamp(_makeRecordId(iterator->key()).repr())
-                   << " maxDelKey is " << _prefixedKeyToTimestamp(maxDelKey);
+                   << Timestamp(_makeRecordId(iterator->key()).repr()) << " maxDelKey is "
+                   << _prefixedKeyToTimestamp(maxDelKey);
             // TODO(deyukong): we should persist _cappedOldestKeyHint because
             // there is a small chance that DeleteFilesInRange successes but CompactRange fails
             // and then crashes and restarts. In this case, there is a hole at the front of oplogs.
@@ -695,7 +692,8 @@ namespace mongo {
         invariant(txn);
 
         std::string old_value;
-        auto status = rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(_cf, key, &old_value); });
+        auto status =
+            rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(_cf, key, &old_value); });
         invariantRocksOK(status);
 
         int old_length = old_value.size();
@@ -742,19 +740,19 @@ namespace mongo {
         std::unique_ptr<RocksIterator> iterator(ru->NewIterator(_cf, _prefix, _isOplog));
         if (!_isOplog) {
             for (rocksPrepareConflictRetry(opCtx,
-                                       [&] {
-                                           iterator->SeekToFirst();
-                                           return iterator->status();
-                                       });
-             iterator->Valid(); rocksPrepareConflictRetry(opCtx, [&] {
-                 iterator->Next();
-                 return iterator->status();
-             })) {
-                 deleteRecord(opCtx, _makeRecordId(iterator->key()));
-           }
+                                           [&] {
+                                               iterator->SeekToFirst();
+                                               return iterator->status();
+                                           });
+                 iterator->Valid(); rocksPrepareConflictRetry(opCtx, [&] {
+                     iterator->Next();
+                     return iterator->status();
+                 })) {
+                deleteRecord(opCtx, _makeRecordId(iterator->key()));
+            }
         } else {
             iterator->SeekToFirst();
-            if(iterator->Valid()){
+            if (iterator->Valid()) {
                 const bool inclusive = true;
                 const bool isTruncate = true;
                 cappedTruncateAfter(opCtx, _makeRecordId(iterator->key()), inclusive, isTruncate);
@@ -770,7 +768,8 @@ namespace mongo {
         rocksdb::Slice beginRange(beginString);
         rocksdb::Slice endRange(endString);
         // TODO(wolfkdy): support it
-        return Status(ErrorCodes::InvalidOptions, "not supported, use rocksdbCompact server paramter instead");
+        return Status(ErrorCodes::InvalidOptions,
+                      "not supported, use rocksdbCompact server paramter instead");
         // return rocksToMongoStatus(_db->CompactRange(&beginRange, &endRange));
     }
 
@@ -974,9 +973,9 @@ namespace mongo {
         // of
         // the collection.
         LOG(0) << "Truncating collection '" << _ns << "' from " << firstRemovedId << " ("
-                      << Timestamp(firstRemovedId.repr()) << ")"
-                      << " to the (" <<  Timestamp(lastRemovedId.repr()) 
-                      << "). Number of records to delete: " << recordsRemoved;
+               << Timestamp(firstRemovedId.repr()) << ")"
+               << " to the (" << Timestamp(lastRemovedId.repr())
+               << "). Number of records to delete: " << recordsRemoved;
 
         if (_isOplog) {
             int retryCnt = 0;
@@ -987,9 +986,10 @@ namespace mongo {
                 AlternativeClientRegion acr(alterClient);
                 const auto tmpOpCtx = cc().makeOperationContext();
                 /* TODO(wolfkdy): RocksHarnessHelper did not register global rocksEngine
-                 * so RocksRecoveryUnit wont be set atomitly by StorageClientObserver::onCreateOperationContext
-                 * remove this line below when this issue is fixed
-                 */ 
+                 * so RocksRecoveryUnit wont be set atomitly by
+                 * StorageClientObserver::onCreateOperationContext remove this line below when this
+                 * issue is fixed
+                 */
                 tmpOpCtx->setRecoveryUnit(std::unique_ptr<RecoveryUnit>(_engine->newRecoveryUnit()),
                                           WriteUnitOfWork::RecoveryUnitState::kNotInUnitOfWork);
                 auto checkRemovedOK = [&] {
@@ -997,24 +997,23 @@ namespace mongo {
                     std::unique_ptr<SeekableRecordCursor> cursor1 = getCursor(tmpOpCtx.get(), true);
                     auto rocksCursor = dynamic_cast<RocksRecordStore::Cursor*>(cursor1.get());
                     auto record = rocksCursor->seekToLast();
-                    
-                    Timestamp lastTs = record? Timestamp(record->id.repr()) : Timestamp();
+
+                    Timestamp lastTs = record ? Timestamp(record->id.repr()) : Timestamp();
                     invariant(lastTs >= truncTs);
                     LOG(logLevel) << "lastTs is " << lastTs << ", truncTs: " << truncTs;
                     return (lastTs == truncTs);
                 };
-                while(true) {
-                    auto s = _compactionScheduler->compactOplog(_cf,
-                                                                _makePrefixedKey(_prefix, firstRemovedId),
-                                                                _makePrefixedKey(_prefix, lastRemovedId));
+                while (true) {
+                    auto s = _compactionScheduler->compactOplog(
+                        _cf, _makePrefixedKey(_prefix, firstRemovedId),
+                        _makePrefixedKey(_prefix, lastRemovedId));
                     invariant(s.isOK());
                     invariant(retryCnt++ < 10);
-                    if(checkRemovedOK()) {
+                    if (checkRemovedOK()) {
                         break;
                     }
                     LOG(logLevel) << "retryCnt: " << retryCnt;
                 }
-
             }
             if (!isTruncate) {
                 // Immediately rewind visibility to our truncation point, to prevent new
@@ -1092,7 +1091,8 @@ namespace mongo {
 
         std::string valueStorage;
         auto key = _makePrefixedKey(prefix, loc);
-        auto status = rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(cf, key, &valueStorage); });
+        auto status =
+            rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(cf, key, &valueStorage); });
         if (status.IsNotFound()) {
             return RecordData(nullptr, 0);
         }
@@ -1130,8 +1130,8 @@ namespace mongo {
     // --------
 
     RocksRecordStore::Cursor::Cursor(OperationContext* opCtx, rocksdb::TOTransactionDB* db,
-                                     rocksdb::ColumnFamilyHandle* cf,
-                                     std::string prefix, bool forward, bool isCapped, bool isOplog,
+                                     rocksdb::ColumnFamilyHandle* cf, std::string prefix,
+                                     bool forward, bool isCapped, bool isOplog,
                                      RecordId startIterator)
         : _opCtx(opCtx),
           _db(db),
@@ -1279,17 +1279,17 @@ namespace mongo {
 
         return {{_lastLoc, {_seekExactResult.data(), static_cast<int>(_seekExactResult.size())}}};
     }
-    
+
     boost::optional<Record> RocksRecordStore::Cursor::seekToLast() {
         _needFirstSeek = false;
         _skipNextAdvance = false;
         // do not support backwoard
         invariant(_forward);
         auto iter = iterator();
-        rocksPrepareConflictRetry(_opCtx, [&] { 
-                                  iter->SeekToLast(); 
-                                  return iter->status(); 
-                                  });
+        rocksPrepareConflictRetry(_opCtx, [&] {
+            iter->SeekToLast();
+            return iter->status();
+        });
         return curr();
     }
 

@@ -28,17 +28,16 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
-
-#include "rocks_begin_transaction_block.h"
-#include "rocks_recovery_unit.h"
 #include "rocks_snapshot_manager.h"
 
 #include <rocksdb/db.h>
 
 #include "mongo/base/checked_cast.h"
 #include "mongo/db/server_options.h"
+#include "mongo/platform/basic.h"
 #include "mongo/util/log.h"
+#include "rocks_begin_transaction_block.h"
+#include "rocks_recovery_unit.h"
 
 namespace mongo {
     void RocksSnapshotManager::setCommittedSnapshot(const Timestamp& ts) {
@@ -50,7 +49,7 @@ namespace mongo {
 
     void RocksSnapshotManager::setLocalSnapshot(const Timestamp& timestamp) {
         stdx::lock_guard<Latch> lock(_localSnapshotMutex);
-        if(timestamp.isNull()) {
+        if (timestamp.isNull()) {
             _localSnapshot = boost::none;
         } else {
             _localSnapshot = timestamp;

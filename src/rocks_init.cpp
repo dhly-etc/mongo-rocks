@@ -27,17 +27,15 @@
  *    it in the license file.
  */
 
-#include "mongo/platform/basic.h"
-
 #include "mongo/base/init.h"
+#include "mongo/db/modules/rocks/src/rocks_parameters_gen.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/storage/storage_engine_impl.h"
 #include "mongo/db/storage/storage_engine_init.h"
 #include "mongo/db/storage/storage_engine_metadata.h"
 #include "mongo/db/storage/storage_options.h"
+#include "mongo/platform/basic.h"
 #include "mongo/util/str.h"
-
-#include "mongo/db/modules/rocks/src/rocks_parameters_gen.h"
 #include "rocks_engine.h"
 #include "rocks_server_status.h"
 

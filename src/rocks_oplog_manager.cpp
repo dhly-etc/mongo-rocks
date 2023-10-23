@@ -29,10 +29,11 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
+#include "rocks_oplog_manager.h"
 
 #include <cstring>
 
+#include "mongo/platform/basic.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/util/concurrency/idle_thread_block.h"
 #include "mongo/util/fail_point.h"
@@ -40,7 +41,6 @@
 #include "mongo/util/log.h"
 #include "mongo/util/scopeguard.h"
 #include "rocks_engine.h"
-#include "rocks_oplog_manager.h"
 
 namespace mongo {
     namespace {
@@ -56,7 +56,8 @@ namespace mongo {
                                          RocksDurabilityManager* durabilityManager)
         : _db(db), _kvEngine(kvEngine), _durabilityManager(durabilityManager) {}
 
-    void RocksOplogManager::init(rocksdb::TOTransactionDB* db, RocksDurabilityManager* durabilityManager) {
+    void RocksOplogManager::init(rocksdb::TOTransactionDB* db,
+                                 RocksDurabilityManager* durabilityManager) {
         _db = db;
         _durabilityManager = durabilityManager;
     }

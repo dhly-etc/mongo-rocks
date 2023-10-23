@@ -28,8 +28,6 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
-
 #include "rocks_recovery_unit.h"
 
 #include <rocksdb/comparator.h>
@@ -47,15 +45,14 @@
 #include "mongo/db/operation_context.h"
 #include "mongo/db/server_options.h"
 #include "mongo/db/storage/journal_listener.h"
+#include "mongo/platform/basic.h"
 #include "mongo/util/log.h"
 #include "mongo/util/stacktrace.h"
-
-#include "rocks_util.h"
-
 #include "rocks_begin_transaction_block.h"
+#include "rocks_engine.h"
 #include "rocks_oplog_manager.h"
 #include "rocks_snapshot_manager.h"
-#include "rocks_engine.h"
+#include "rocks_util.h"
 
 namespace mongo {
     namespace {

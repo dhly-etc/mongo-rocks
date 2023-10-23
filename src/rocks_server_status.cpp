@@ -29,24 +29,22 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include <sstream>
-
-#include "mongo/platform/basic.h"
-
 #include "rocks_server_status.h"
 
 #include <rocksdb/db.h>
 #include <rocksdb/statistics.h>
+
+#include <sstream>
 
 #include "mongo/base/checked_cast.h"
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/db_raii.h"
 #include "mongo/db/namespace_string.h"
+#include "mongo/platform/basic.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 #include "mongo/util/scopeguard.h"
-
 #include "rocks_engine.h"
 #include "rocks_recovery_unit.h"
 
@@ -315,8 +313,8 @@ namespace mongo {
     }
     void RocksServerStatusSection::generateCompactSchedulerSection(BSONObjBuilder* bob) const {
         // compaction scheduler stats
-        // TODO(wolfkdy): use jstests and failPoints to test primary/secondary status after dropIndex
-        // and dropCollection, test prefixes draining before and after mongod reboot
+        // TODO(wolfkdy): use jstests and failPoints to test primary/secondary status after
+        // dropIndex and dropCollection, test prefixes draining before and after mongod reboot
         BSONObjBuilder bb;
         bool large = false;
         auto droppedPrefixes = _engine->getCompactionScheduler()->getDroppedPrefixes();

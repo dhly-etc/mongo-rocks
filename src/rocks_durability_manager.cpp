@@ -26,11 +26,11 @@
  *    it in the license file.
  */
 
-#include "mongo/db/storage/journal_listener.h"
+#include "rocks_durability_manager.h"
 
 #include <rocksdb/db.h>
 
-#include "rocks_durability_manager.h"
+#include "mongo/db/storage/journal_listener.h"
 #include "rocks_util.h"
 
 namespace mongo {
@@ -60,7 +60,7 @@ namespace mongo {
             return;
         }
         _lastSyncTime.store(current + 1);
- 
+
         stdx::unique_lock<Latch> jlk(_journalListenerMutex);
         JournalListener::Token token = _journalListener->getToken();
         if (!_durable || forceFlush) {

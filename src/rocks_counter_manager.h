@@ -28,6 +28,9 @@
 
 #pragma once
 
+#include <rocksdb/db.h>
+#include <rocksdb/slice.h>
+
 #include <atomic>
 #include <list>
 #include <memory>
@@ -35,19 +38,17 @@
 #include <string>
 #include <unordered_map>
 
-#include <rocksdb/db.h>
-#include <rocksdb/slice.h>
+#include "mongo/base/string_data.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
-
-#include "mongo/base/string_data.h"
 #include "mongo/platform/mutex.h"
 
 namespace mongo {
 
     class RocksCounterManager {
     public:
-        RocksCounterManager(rocksdb::TOTransactionDB* db, rocksdb::ColumnFamilyHandle* cf, bool crashSafe)
+        RocksCounterManager(rocksdb::TOTransactionDB* db, rocksdb::ColumnFamilyHandle* cf,
+                            bool crashSafe)
             : _db(db), _cf(cf), _crashSafe(crashSafe), _syncCounter(0) {}
 
         long long loadCounter(const std::string& counterKey);

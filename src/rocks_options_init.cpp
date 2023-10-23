@@ -31,7 +31,6 @@
 #include "mongo/util/exit_code.h"
 #include "mongo/util/options_parser/startup_option_init.h"
 #include "mongo/util/options_parser/startup_options.h"
-
 #include "rocks_global_options.h"
 
 namespace moe = mongo::optionenvironment;

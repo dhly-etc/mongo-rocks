@@ -28,13 +28,12 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
-#include "mongo/platform/basic.h"
+#include "rocks_global_options.h"
 
 #include "mongo/base/status.h"
+#include "mongo/platform/basic.h"
 #include "mongo/util/log.h"
 #include "mongo/util/options_parser/constraints.h"
-
-#include "rocks_global_options.h"
 
 namespace moe = mongo::optionenvironment;
 

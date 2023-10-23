@@ -28,6 +28,11 @@
 
 #pragma once
 
+#include <rocksdb/iterator.h>
+#include <rocksdb/slice.h>
+#include <rocksdb/utilities/write_batch_with_index.h>
+#include <rocksdb/write_batch.h>
+
 #include <atomic>
 #include <map>
 #include <stack>
@@ -35,19 +40,12 @@
 #include <unordered_map>
 #include <vector>
 
-#include <rocksdb/iterator.h>
-#include <rocksdb/slice.h>
-#include <rocksdb/utilities/write_batch_with_index.h>
-#include <rocksdb/write_batch.h>
-
+#include "mongo/base/owned_pointer_vector.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
-
-#include "mongo/base/owned_pointer_vector.h"
 #include "mongo/db/record_id.h"
 #include "mongo/db/storage/recovery_unit.h"
 #include "mongo/util/timer.h"
-
 #include "rocks_compaction_scheduler.h"
 #include "rocks_counter_manager.h"
 #include "rocks_durability_manager.h"
@@ -155,12 +153,15 @@ namespace mongo {
 
         rocksdb::TOTransaction* getTxnNoCreate();
 
-        rocksdb::Status Get(rocksdb::ColumnFamilyHandle* cf, const rocksdb::Slice& key, std::string* value);
+        rocksdb::Status Get(rocksdb::ColumnFamilyHandle* cf, const rocksdb::Slice& key,
+                            std::string* value);
 
-        RocksIterator* NewIterator(rocksdb::ColumnFamilyHandle* cf, std::string prefix, bool isOplog = false);
+        RocksIterator* NewIterator(rocksdb::ColumnFamilyHandle* cf, std::string prefix,
+                                   bool isOplog = false);
 
         static RocksIterator* NewIteratorWithTxn(rocksdb::TOTransaction* txn,
-                                                 rocksdb::ColumnFamilyHandle* cf, std::string prefix);
+                                                 rocksdb::ColumnFamilyHandle* cf,
+                                                 std::string prefix);
 
         void incrementCounter(const rocksdb::Slice& counterKey, std::atomic<long long>* counter,
                               long long delta);
@@ -330,6 +331,6 @@ namespace mongo {
         typedef std::vector<std::unique_ptr<Change>> Changes;
         Changes _changes;
         static std::atomic<int> _totalLiveRecoveryUnits;
-        RocksEngine* _engine; // not owned
+        RocksEngine* _engine;  // not owned
     };
 }  // namespace mongo
