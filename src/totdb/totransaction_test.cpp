@@ -117,7 +117,7 @@ namespace rocksdb {
         WriteOptions write_options;
         char ts_buf[8];
         Slice ts_slice(ts_buf, sizeof(ts_buf));
-        Encoder(ts_buf, sizeof(ts_buf)).put64(50);
+        DataView(ts_buf).write<LittleEndian<uint64_t>>(50);
         ReadOptions read_options;
         read_options.timestamp = &ts_slice;
         string value;
@@ -314,7 +314,7 @@ namespace rocksdb {
         WriteOptions write_options;
         char ts_buf[8];
         Slice ts_slice(ts_buf, sizeof(ts_buf));
-        Encoder(ts_buf, sizeof(ts_buf)).put64(50);
+        DataView(ts_buf).write<LittleEndian<uint64_t>>(50);
         ReadOptions read_options;
         read_options.timestamp = &ts_slice;
 
@@ -465,7 +465,7 @@ namespace rocksdb {
         WriteOptions write_options;
         char ts_buf[8];
         Slice ts_slice(ts_buf, sizeof(ts_buf));
-        Encoder(ts_buf, sizeof(ts_buf)).put64(50);
+        DataView(ts_buf).write<LittleEndian<uint64_t>>(50);
         ReadOptions read_options;
         read_options.timestamp = &ts_slice;
         string value;
@@ -641,7 +641,7 @@ namespace rocksdb {
         WriteOptions write_options;
         char ts_buf[8];
         Slice ts_slice(ts_buf, sizeof(ts_buf));
-        Encoder(ts_buf, sizeof(ts_buf)).put64(50);
+        DataView(ts_buf).write<LittleEndian<uint64_t>>(50);
         ReadOptions read_options;
         read_options.timestamp = &ts_slice;
         string value;
@@ -1488,7 +1488,7 @@ namespace rocksdb {
         ReadOptions tmp_read_opt;
         char ts_buf[8];
         Slice ts_slice(ts_buf, sizeof(ts_buf));
-        Encoder(ts_buf, sizeof(ts_buf)).put64(101);
+        DataView(ts_buf).write<LittleEndian<uint64_t>>(101);
         tmp_read_opt.timestamp = &ts_slice;
         ASSERT_ROCKS_OK(txn_db->Get(tmp_read_opt, "abc", &value));
         auto txn1 =
@@ -1537,7 +1537,7 @@ namespace rocksdb {
             std::unique_ptr<TOTransaction>(txn_db->BeginTransaction(write_options, txn_options));
         char ts_buf[8];
         Slice ts_slice(ts_buf, sizeof(ts_buf));
-        Encoder(ts_buf, sizeof(ts_buf)).put64(6);
+        DataView(ts_buf).write<LittleEndian<uint64_t>>(6);
         read_options.timestamp = &ts_slice;
         auto iter = std::unique_ptr<Iterator>(txnR->GetIterator(read_options));
         iter->Seek("");
@@ -1640,7 +1640,7 @@ namespace rocksdb {
         ReadOptions read_options;
         char ts_buf[8];
         Slice ts_slice(ts_buf, sizeof(ts_buf));
-        Encoder(ts_buf, sizeof(ts_buf)).put64(50);
+        DataView(ts_buf).write<LittleEndian<uint64_t>>(50);
         read_options.timestamp = &ts_slice;
         string value;
         Status s;

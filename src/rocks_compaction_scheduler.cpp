@@ -366,9 +366,8 @@ namespace mongo {
             {
                 char start_ts_buf[sizeof(rocksdb::RocksTimeStamp)];
                 char end_ts_buf[sizeof(rocksdb::RocksTimeStamp)];
-                Encoder(start_ts_buf, sizeof(rocksdb::RocksTimeStamp)).put64(0);
-                Encoder(end_ts_buf, sizeof(rocksdb::RocksTimeStamp))
-                    .put64(mongo::Timestamp::max().asULL());
+                DataView(start_ts_buf).write<LittleEndian<uint64_t>>(0);
+                DataView(end_ts_buf).write<LittleEndian<uint64_t>>(mongo::Timestamp::max().asULL());
                 std::string start_str(op._start_str);
                 std::string end_str(op._end_str);
                 start_str.append(start_ts_buf, sizeof(rocksdb::RocksTimeStamp));
