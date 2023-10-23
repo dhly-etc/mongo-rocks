@@ -29,7 +29,6 @@
 
 #include "mongo/base/init.h"
 #include "mongo/db/namespace_string.h"
-#include "mongo/db/operation_context_noop.h"
 #include "mongo/db/service_context.h"
 #include "mongo/platform/basic.h"
 #include "mongo/stdx/memory.h"

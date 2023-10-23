@@ -37,7 +37,7 @@
 #include <string>
 
 #include "mongo/base/init.h"
-#include "mongo/db/concurrency/write_conflict_exception.h"
+#include "mongo/db/concurrency/exception_util.h"
 #include "mongo/db/storage/sorted_data_interface_test_harness.h"
 #include "mongo/platform/basic.h"
 #include "mongo/stdx/memory.h"

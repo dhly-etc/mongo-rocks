@@ -37,7 +37,7 @@
 #include <string>
 #include <vector>
 
-#include "mongo/db/storage/capped_callback.h"
+#include "mongo/db/catalog/capped_collection_maintenance.h"
 #include "mongo/db/storage/record_store.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/platform/mutex.h"

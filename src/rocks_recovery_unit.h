@@ -40,7 +40,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "mongo/base/owned_pointer_vector.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
 #include "mongo/db/record_id.h"
