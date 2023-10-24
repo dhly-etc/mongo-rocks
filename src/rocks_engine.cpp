@@ -497,6 +497,13 @@ namespace mongo {
         return _createIdent(ident, &configBuilder);
     }
 
+    Status RocksEngine::createColumnStore(OperationContext* opCtx, const NamespaceString& ns,
+                                          const CollectionOptions& collOptions, StringData ident,
+                                          const IndexDescriptor* desc) {
+        // TODO
+        MONGO_UNIMPLEMENTED;
+    }
+
     std::unique_ptr<SortedDataInterface> RocksEngine::getSortedDataInterface(
         OperationContext* opCtx, const NamespaceString& nss, const CollectionOptions& collOptions,
         StringData ident, const IndexDescriptor* desc) {
@@ -535,6 +542,15 @@ namespace mongo {
         return index;
     }
 
+    std::unique_ptr<ColumnStore> RocksEngine::getColumnStore(OperationContext* opCtx,
+                                                             const NamespaceString& nss,
+                                                             const CollectionOptions& collOptions,
+                                                             StringData ident,
+                                                             const IndexDescriptor*) {
+        // TODO
+        MONGO_UNIMPLEMENTED;
+    }
+
     // TODO(wolfkdy); this interface is not fully reviewed
     std::unique_ptr<RecordStore> RocksEngine::makeTemporaryRecordStore(OperationContext* opCtx,
                                                                        StringData ident,
@@ -565,6 +581,11 @@ namespace mongo {
         }
 
         return std::move(recordStore);
+    }
+
+    Status RocksEngine::dropSortedDataInterface(OperationContext* opCtx, StringData ident) {
+        // TODO
+        MONGO_UNIMPLEMENTED;
     }
 
     // cannot be rolled back
@@ -615,6 +636,11 @@ namespace mongo {
         }
 
         return s;
+    }
+
+    void RocksEngine::dropIdentForImport(OperationContext* opCtx, StringData ident) {
+        // TODO
+        MONGO_UNIMPLEMENTED;
     }
 
     bool RocksEngine::hasIdent(OperationContext* opCtx, StringData ident) const {
@@ -682,6 +708,16 @@ namespace mongo {
     Timestamp RocksEngine::getOldestTimestamp() const { return Timestamp(_oldestTimestamp.load()); }
     Timestamp RocksEngine::getCheckpointTimestamp() const {
         return Timestamp(_lastStableCheckpointTimestamp.load());
+    }
+
+    void RocksEngine::setPinnedOplogTimestamp(const Timestamp& pinnedTimestamp) {
+        // TODO
+        MONGO_UNIMPLEMENTED;
+    }
+
+    void RocksEngine::dump() const {
+        // TODO
+        MONGO_UNIMPLEMENTED;
     }
 
     void RocksEngine::setMaxWriteMBPerSec(int maxWriteMBPerSec) {

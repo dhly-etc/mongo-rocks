@@ -102,13 +102,27 @@ namespace mongo {
                                          const CollectionOptions& collOptions, StringData ident,
                                          const IndexDescriptor* desc) override;
 
+        Status createColumnStore(OperationContext* opCtx, const NamespaceString& ns,
+                                 const CollectionOptions& collOptions, StringData ident,
+                                 const IndexDescriptor* desc) override;
+
         std::unique_ptr<SortedDataInterface> getSortedDataInterface(
             OperationContext* opCtx, const NamespaceString& nss,
             const CollectionOptions& collOptions, StringData ident,
             const IndexDescriptor* desc) override;
 
+        std::unique_ptr<ColumnStore> getColumnStore(OperationContext* opCtx,
+                                                    const NamespaceString& nss,
+                                                    const CollectionOptions& collOptions,
+                                                    StringData ident,
+                                                    const IndexDescriptor*) override;
+
+        Status dropSortedDataInterface(OperationContext* opCtx, StringData ident) override;
+
         Status dropIdent(RecoveryUnit* ru, StringData ident,
                          const StorageEngine::DropIdentCallback& onDrop = nullptr) override;
+
+        void dropIdentForImport(OperationContext* opCtx, StringData ident) override;
 
         void flushAllFiles(OperationContext* opCtx, bool callerHoldsReadLock) override;
 
@@ -217,12 +231,15 @@ namespace mongo {
          * Returns true if a background job is running for the namespace.
          */
         static bool initRsOplogBackgroundThread(const NamespaceString& nss);
-        static void appendGlobalStats(BSONObjBuilder& b);
 
         Timestamp getStableTimestamp() const override;
         Timestamp getOldestTimestamp() const override;
         Timestamp getCheckpointTimestamp() const override;
         Timestamp getInitialDataTimestamp() const;
+
+        void setPinnedOplogTimestamp(const Timestamp& pinnedTimestamp) override;
+
+        void dump() const override;
 
         /**
          * Returns the minimum possible Timestamp value in the oplog that replication may need for
