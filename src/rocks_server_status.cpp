@@ -320,7 +320,7 @@ namespace mongo {
         auto droppedPrefixes = _engine->getCompactionScheduler()->getDroppedPrefixes();
         {
             BSONArrayBuilder a;
-            for (auto p : droppedPrefixes) {
+            for (const auto& p : droppedPrefixes) {
                 a.append(
                     BSON("prefix" << static_cast<long long>(p.first) << "debug-info" << p.second));
                 if (a.len() > 1024 * 1024 * 15) {
@@ -332,7 +332,7 @@ namespace mongo {
         }
         auto obj = bb.obj();
         if (large) {
-            log() << "status is over 15MB";
+            LOGV2(0, "Status is over 15MB");
         }
         bob->append("compaction-scheduler", obj);
     }
