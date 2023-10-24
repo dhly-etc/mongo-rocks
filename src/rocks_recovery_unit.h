@@ -86,26 +86,18 @@ namespace mongo {
         RocksRecoveryUnit(bool durable, RocksEngine* engine);
         virtual ~RocksRecoveryUnit();
 
-        void beginUnitOfWork(OperationContext* opCtx) override;
+        void doBeginUnitOfWork() override;
         void prepareUnitOfWork() override;
-        void commitUnitOfWork() override;
-        void abortUnitOfWork() override;
+        void doCommitUnitOfWork() override;
+        void doAbortUnitOfWork() override;
 
-        bool waitUntilDurable() override;
+        bool waitUntilDurable(OperationContext* opCtx) override;
 
-        bool waitUntilUnjournaledWritesDurable(bool stableCheckpoint = true) override;
-
-        void registerChange(Change* change) override;
-
-        void abandonSnapshot() override;
+        void doAbandonSnapshot() override;
         void preallocateSnapshot() override;
 
-        Status obtainMajorityCommittedSnapshot() override;
-
         // TODO(cuixin), need to know why the abstract interface layer remove the const
-        boost::optional<Timestamp> getPointInTimeReadTimestamp() override;
-
-        SnapshotId getSnapshotId() const override;
+        boost::optional<Timestamp> getPointInTimeReadTimestamp(OperationContext* opCtx) override;
 
         Status setTimestamp(Timestamp timestamp) override;
 
@@ -128,10 +120,6 @@ namespace mongo {
         PrepareConflictBehavior getPrepareConflictBehavior() const override;
 
         void setRoundUpPreparedTimestamps(bool value) override;
-
-        void setCatalogConflictingTimestamp(Timestamp timestamp) override;
-
-        Timestamp getCatalogConflictingTimestamp() const override;
 
         void setTimestampReadSource(ReadSource source,
                                     boost::optional<Timestamp> provided = boost::none) override;
@@ -195,51 +183,6 @@ namespace mongo {
 
         boost::optional<int64_t> getOplogVisibilityTs();
 
-        /**
-         * State transitions:
-         *
-         *   /------------------------> Inactive <-----------------------------\
-         *   |                             |                                   |
-         *   |                             |                                   |
-         *   |              /--------------+--------------\                    |
-         *   |              |                             |                    | abandonSnapshot()
-         *   |              |                             |                    |
-         *   |   beginUOW() |                             | _txnOpen()         |
-         *   |              |                             |                    |
-         *   |              V                             V                    |
-         *   |    InactiveInUnitOfWork          ActiveNotInUnitOfWork ---------/
-         *   |              |                             |
-         *   |              |                             |
-         *   |   _txnOpen() |                             | beginUOW()
-         *   |              |                             |
-         *   |              \--------------+--------------/
-         *   |                             |
-         *   |                             |
-         *   |                             V
-         *   |                           Active
-         *   |                             |
-         *   |                             |
-         *   |              /--------------+--------------\
-         *   |              |                             |
-         *   |              |                             |
-         *   |   abortUOW() |                             | commitUOW()
-         *   |              |                             |
-         *   |              V                             V
-         *   |          Aborting                      Committing
-         *   |              |                             |
-         *   |              |                             |
-         *   |              |                             |
-         *   \--------------+-----------------------------/
-         *
-         */
-        enum class State {
-            kInactive,
-            kInactiveInUnitOfWork,
-            kActiveNotInUnitOfWork,
-            kActive,
-            kAborting,
-            kCommitting,
-        };
         State getState_forTest() const;
 
         rocksdb::TOTransactionDB* getDB();
@@ -273,26 +216,6 @@ namespace mongo {
          */
         Timestamp _getTransactionReadTimestamp(rocksdb::TOTransaction* txn);
 
-        /**
-         * Transitions to new state.
-         */
-        void _setState(State newState);
-
-        /**
-         * Returns true if active.
-         */
-        bool _isActive() const;
-
-        /**
-         * Returns true if currently managed by a WriteUnitOfWork.
-         */
-        bool _inUnitOfWork() const;
-
-        /**
-         * Returns true if currently running commit or rollback handlers
-         */
-        bool _isCommittingOrAborting() const;
-
         std::unique_ptr<rocksdb::TOTransaction> _transaction;
 
         bool _durable;
@@ -322,13 +245,10 @@ namespace mongo {
         uint64_t _mySnapshotId;
         Timestamp _majorityCommittedSnapshot;
         Timestamp _readAtTimestamp;
-        Timestamp _catalogConflictTimestamp;
         std::unique_ptr<Timer> _timer;
         CounterMap _deltaCounters;
         bool _isOplogReader;
         boost::optional<int64_t> _oplogVisibleTs = boost::none;
-        typedef std::vector<std::unique_ptr<Change>> Changes;
-        Changes _changes;
         static std::atomic<int> _totalLiveRecoveryUnits;
         RocksEngine* _engine;  // not owned
     };

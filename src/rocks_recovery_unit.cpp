@@ -257,7 +257,7 @@ namespace mongo {
         : _durable(durable),
           _areWriteUnitOfWorksBanned(false),
           _isTimestamped(false),
-          _timestampReadSource(ReadSource::kUnset),
+          _timestampReadSource(ReadSource::kNoTimestamp),
           _orderedCommit(true),
           _mySnapshotId(nextSnapshotId.fetchAndAdd(1)),
           _isOplogReader(false),
@@ -292,20 +292,12 @@ namespace mongo {
             getDurabilityManager()->notifyPreparedUnitOfWorkHasCommittedOrAborted();
         }
 
-        try {
-            for (Changes::const_iterator it = _changes.begin(), end = _changes.end(); it != end;
-                 ++it) {
-                (*it)->commit(commitTs);
-            }
-            _changes.clear();
-        } catch (...) {
-            std::terminate();
-        }
+        commitRegisteredChanges(commitTs);
 
         for (auto pair : _deltaCounters) {
             auto& counter = pair.second;
-            counter._value->fetch_add(counter._delta, std::memory_order::memory_order_relaxed);
-            long long newValue = counter._value->load(std::memory_order::memory_order_relaxed);
+            counter._value->fetch_add(counter._delta, std::memory_order_relaxed);
+            long long newValue = counter._value->load(std::memory_order_relaxed);
             _engine->getCounterManager()->updateCounter(pair.first, newValue);
         }
 
@@ -328,24 +320,14 @@ namespace mongo {
         if (notifyDone) {
             getDurabilityManager()->notifyPreparedUnitOfWorkHasCommittedOrAborted();
         }
-        try {
-            for (Changes::const_reverse_iterator it = _changes.rbegin(), end = _changes.rend();
-                 it != end; ++it) {
-                const auto& change = *it;
-                LOGV2_DEBUG(0, 2, "CUSTOM ROLLBACK",
-                            "reason"_attr = redact(demangleName(typeid(*change))));
-                change->rollback();
-            }
-            _changes.clear();
-        } catch (...) {
-            std::terminate();
-        }
+
+        abortRegisteredChanges();
 
         _deltaCounters.clear();
         _setState(State::kInactive);
     }
 
-    void RocksRecoveryUnit::beginUnitOfWork(OperationContext* opCtx) {
+    void RocksRecoveryUnit::doBeginUnitOfWork() {
         invariant(!_inUnitOfWork(), toString(_state));
         invariant(
             !_isCommittingOrAborting(),
@@ -369,40 +351,27 @@ namespace mongo {
         invariant(status.ok(), status.ToString());
     }
 
-    void RocksRecoveryUnit::commitUnitOfWork() {
+    void RocksRecoveryUnit::doCommitUnitOfWork() {
         invariant(_inUnitOfWork(), toString(_state));
         _commit();
     }
 
-    void RocksRecoveryUnit::abortUnitOfWork() {
+    void RocksRecoveryUnit::doAbortUnitOfWork() {
         invariant(_inUnitOfWork(), toString(_state));
         _abort();
     }
 
-    bool RocksRecoveryUnit::waitUntilDurable() {
+    bool RocksRecoveryUnit::waitUntilDurable(OperationContext* opCtx) {
         invariant(!_inUnitOfWork(), toString(_state));
         getDurabilityManager()->waitUntilDurable(false);
         return true;
-    }
-
-    // TODO(cuixin), consider stableCheckpoint
-    bool RocksRecoveryUnit::waitUntilUnjournaledWritesDurable(bool stableCheckpoint) {
-        invariant(!_inUnitOfWork(), toString(_state));
-        waitUntilDurable();
-        return true;
-    }
-
-    void RocksRecoveryUnit::registerChange(Change* change) {
-        invariant(_inUnitOfWork(), toString(_state));
-        _changes.push_back(std::unique_ptr<Change>{change});
     }
 
     void RocksRecoveryUnit::assertInActiveTxn() const {
         if (_isActive()) {
             return;
         }
-        severe() << "Recovery unit is not active. Current state: " << toString(_state);
-        fassertFailed(28576);
+        LOGV2_FATAL(28576, "Recovery unit is not active", "state"_attr = toString(_state));
     }
 
     boost::optional<int64_t> RocksRecoveryUnit::getOplogVisibilityTs() {
@@ -424,7 +393,7 @@ namespace mongo {
 
     rocksdb::TOTransaction* RocksRecoveryUnit::getTxnNoCreate() { return _transaction.get(); }
 
-    void RocksRecoveryUnit::abandonSnapshot() {
+    void RocksRecoveryUnit::doAbandonSnapshot() {
         invariant(!_inUnitOfWork(), toString(_state));
         _deltaCounters.clear();
         if (_isActive()) {
@@ -440,8 +409,8 @@ namespace mongo {
         invariant(_isActive(), toString(_state));
         if (_timer) {
             const int transactionTime = _timer->millis();
-            if (transactionTime >= serverGlobalParams.slowMS) {
-                LOGV2_DEBUG(0, kSlowTransactionSeverity, "Slow Rocks transaction",
+            if (transactionTime >= serverGlobalParams.slowMS.loadRelaxed()) {
+                LOGV2_DEBUG(0, kSlowTransactionSeverity.toInt(), "Slow Rocks transaction",
                             "snapshot_id"_attr = _mySnapshotId,
                             "transactionTimeMillis"_attr = transactionTime);
             }
@@ -493,7 +462,6 @@ namespace mongo {
 
         _prepareTimestamp = Timestamp();
         _durableTimestamp = Timestamp();
-        _catalogConflictTimestamp = Timestamp();
         _roundUpPreparedTimestamps = RoundUpPreparedTimestamps::kNoRound;
         _mySnapshotId = nextSnapshotId.fetchAndAdd(1);
         _isOplogReader = false;
@@ -501,22 +469,8 @@ namespace mongo {
         _orderedCommit = true;  // Default value is true; we assume all writes are ordered.
     }
 
-    SnapshotId RocksRecoveryUnit::getSnapshotId() const {
-        // TODO: use actual rocks snapshot id
-        return SnapshotId(_mySnapshotId);
-    }
-
-    Status RocksRecoveryUnit::obtainMajorityCommittedSnapshot() {
-        invariant(_timestampReadSource == ReadSource::kMajorityCommitted);
-        auto snapshotName = getSnapshotManager()->getMinSnapshotForNextCommittedRead();
-        if (!snapshotName) {
-            return {ErrorCodes::ReadConcernMajorityNotAvailableYet,
-                    "Read concern majority reads are currently not possible."};
-        }
-        _majorityCommittedSnapshot = Timestamp(*snapshotName);
-        return Status::OK();
-    }
-    boost::optional<Timestamp> RocksRecoveryUnit::getPointInTimeReadTimestamp() {
+    boost::optional<Timestamp> RocksRecoveryUnit::getPointInTimeReadTimestamp(
+        OperationContext* opCtx) {
         // After a ReadSource has been set on this RecoveryUnit, callers expect that this method
         // returns
         // the read timestamp that will be used for current or future transactions. Because callers
@@ -526,8 +480,8 @@ namespace mongo {
         // have
         // read timestamps.
         switch (_timestampReadSource) {
-            case ReadSource::kUnset:
             case ReadSource::kNoTimestamp:
+            case ReadSource::kCheckpoint:
                 return boost::none;
             case ReadSource::kMajorityCommitted:
                 // This ReadSource depends on a previous call to obtainMajorityCommittedSnapshot()
@@ -567,10 +521,10 @@ namespace mongo {
                 return _readAtTimestamp;
 
             // The follow ReadSources returned values in the first switch block.
-            case ReadSource::kUnset:
             case ReadSource::kNoTimestamp:
             case ReadSource::kMajorityCommitted:
             case ReadSource::kProvided:
+            case ReadSource::kCheckpoint:
                 MONGO_UNREACHABLE;
         }
         MONGO_UNREACHABLE;
@@ -583,17 +537,22 @@ namespace mongo {
                                 << toString(_state));
 
         // Only start a timer for transaction's lifetime if we're going to log it.
-        if (shouldLog(kSlowTransactionSeverity)) {
+        if (shouldLog(MONGO_LOGV2_DEFAULT_COMPONENT, kSlowTransactionSeverity)) {
             _timer.reset(new Timer());
         }
 
         switch (_timestampReadSource) {
-            case ReadSource::kUnset:
             case ReadSource::kNoTimestamp: {
                 if (_isOplogReader) {
                     _oplogVisibleTs =
                         static_cast<std::int64_t>(getOplogManager()->getOplogReadTimestamp());
                 }
+                RocksBeginTxnBlock(getDB(), &_transaction, _prepareConflictBehavior,
+                                   _roundUpPreparedTimestamps)
+                    .done();
+                break;
+            }
+            case ReadSource::kCheckpoint: {
                 RocksBeginTxnBlock(getDB(), &_transaction, _prepareConflictBehavior,
                                    _roundUpPreparedTimestamps)
                     .done();
@@ -857,39 +816,6 @@ namespace mongo {
 
     RecoveryUnit::ReadSource RocksRecoveryUnit::getTimestampReadSource() const {
         return _timestampReadSource;
-    }
-
-    void RocksRecoveryUnit::_setState(State newState) { _state = newState; }
-
-    bool RocksRecoveryUnit::_isActive() const {
-        return State::kActiveNotInUnitOfWork == _state || State::kActive == _state;
-    }
-
-    bool RocksRecoveryUnit::_inUnitOfWork() const {
-        return State::kInactiveInUnitOfWork == _state || State::kActive == _state;
-    }
-
-    bool RocksRecoveryUnit::_isCommittingOrAborting() const {
-        return State::kCommitting == _state || State::kAborting == _state;
-    }
-
-    void RocksRecoveryUnit::setCatalogConflictingTimestamp(Timestamp timestamp) {
-        // This cannot be called after a storage snapshot is allocated.
-        invariant(!_isActive(), toString(_state));
-        invariant(_timestampReadSource == ReadSource::kNoTimestamp,
-                  str::stream() << "Illegal to set catalog conflicting timestamp for a read source "
-                                << static_cast<int>(_timestampReadSource));
-        invariant(_catalogConflictTimestamp.isNull(),
-                  str::stream() << "Trying to set catalog conflicting timestamp to "
-                                << timestamp.toString() << ". It's already set to "
-                                << _catalogConflictTimestamp.toString());
-        invariant(!timestamp.isNull());
-
-        _catalogConflictTimestamp = timestamp;
-    }
-
-    Timestamp RocksRecoveryUnit::getCatalogConflictingTimestamp() const {
-        return _catalogConflictTimestamp;
     }
 
     rocksdb::Status RocksRecoveryUnit::Get(rocksdb::ColumnFamilyHandle* cf,
