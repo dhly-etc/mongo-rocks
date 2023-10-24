@@ -676,6 +676,10 @@ namespace mongo {
         _durabilityManager->setJournalListener(jl);
     }
 
+    bool RocksEngine::initRsOplogBackgroundThread(const NamespaceString& nss) {
+        MONGO_UNIMPLEMENTED;  // TODO
+    }
+
     void RocksEngine::setOldestTimestampFromStable() {
         Timestamp stableTimestamp(_stableTimestamp.load());
 
