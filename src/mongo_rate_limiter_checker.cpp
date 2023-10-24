@@ -52,10 +52,10 @@ namespace mongo {
         std::string name() const { return "MongoRateLimiterChecker"; }
 
         Status init() {
-            log() << "[Mongo Rate Limiter Checker]: inited: "
-                  << "disk is " << getMongoRateLimitParameter().getDisk() << "; "
-                  << "iops is " << getMongoRateLimitParameter().getIops() << "; "
-                  << "mbps is " << getMongoRateLimitParameter().getMbps() << "; ";
+            LOGV2(0, "Mongo Rate Limiter Checker initialized",
+                  "disk"_attr = getMongoRateLimitParameter().getDisk(),
+                  "iops"_attr = getMongoRateLimitParameter().getIops(),
+                  "mbps"_attr = getMongoRateLimitParameter().getMbps());
             if (getMongoRateLimitParameter().getDisk() == "") {
                 return Status(ErrorCodes::InternalError, str::stream() << "disk is empty");
             }
@@ -94,9 +94,9 @@ namespace mongo {
                 // read /proc/diskstats data
                 auto readStatus = readProcDiskStats(getMongoRateLimitParameter().getDisk());
                 if (!readStatus.isOK()) {
-                    log() << "[Mongo Rate Limiter Checker]: disk is "
-                          << getMongoRateLimitParameter().getDisk() << "; readStatus is "
-                          << readStatus.getStatus().toString() << ";";
+                    LOGV2(0, "Mongo Rate Limiter Checker",
+                          "disk"_attr = getMongoRateLimitParameter().getDisk(),
+                          "readStatus"_attr = readStatus.getStatus().toString());
                     break;
                 }
 
@@ -200,8 +200,8 @@ namespace mongo {
     void startMongoRateLimiterChecker() {
         auto status = mongoRateLimiterChecker.init();
         if (!status.isOK()) {
-            log() << "[Mongo Rate Limiter Checker]: init failed; status is " << status.toString()
-                  << ";";
+            LOGV2(0, "Mongo Rate Limiter Checker initialization failed",
+                  "status"_attr = status.toString());
             return;
         }
         mongoRateLimiterChecker.go();
