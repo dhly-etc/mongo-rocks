@@ -91,7 +91,7 @@ namespace mongo {
         // as we don't know which cf a prefix exists, we have to compact each prefix out of each cf.
         // since prefix is globally unique, we don't worry about deleting unexpceted data.
         uint32_t loadDroppedPrefixes(rocksdb::Iterator* iter,
-                                     const std::vector<rocksdb::ColumnFamilyHandle*>);
+                                     std::vector<rocksdb::ColumnFamilyHandle*>);
         Status dropPrefixesAtomic(rocksdb::ColumnFamilyHandle* cf,
                                   const std::vector<std::string>& prefixesToDrop,
                                   rocksdb::TOTransaction* txn, const BSONObj& debugInfo);
@@ -99,15 +99,15 @@ namespace mongo {
                              bool opSucceeded);
 
         // calculate Oplog Delete Entries
-        void addOplogEntriesDeleted(const uint64_t entries);
+        void addOplogEntriesDeleted(uint64_t entries);
         // calculate Oplog Delete Size
-        void addOplogSizeDeleted(const uint64_t size);
+        void addOplogSizeDeleted(uint64_t size);
         // add up to Oplog Compact Removed Entries
         void addOplogCompactRemoved();
         // add up tp Oplog Compact Preserved Entries
         void addOplogCompactPreserved();
         // query Oplog Delete and Compact all Stats
-        const OplogDelCompactStats getOplogDelCompactStats() const;
+        OplogDelCompactStats getOplogDelCompactStats() const;
 
     private:
         void compactPrefix(rocksdb::ColumnFamilyHandle* cf, const std::string& prefix);

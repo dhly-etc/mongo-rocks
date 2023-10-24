@@ -275,7 +275,7 @@ namespace mongo {
     }  // namespace
 
     void CompactionBackgroundJob::run() {
-        Client::initThread(_name);
+        Client::initThread(_name, getGlobalServiceContext()->getService());
         stdx::unique_lock<Latch> lk(_compactionMutex);
         while (_compactionThreadRunning) {
             // check if we have something to compact
@@ -380,7 +380,8 @@ namespace mongo {
                 if (!s1.ok()) {
                     // Do not fail the entire procedure, since there is still chance
                     // to purge the range below, in CompactRange
-                    log() << "Failed to delete files in compacted range: " << s1.ToString();
+                    LOGV2(0, "Failed to delete files in compacted range",
+                          "range"_attr = s1.ToString());
                 }
             }
 
@@ -427,7 +428,7 @@ namespace mongo {
         s = _db->CompactRange(compact_options, op._cf, start, end);
 
         if (!s.ok()) {
-            log() << "Failed to compact range: " << s.ToString();
+            LOGV2(0, "Failed to compact range", "range"_attr = s.ToString());
             if (op._notification != boost::none) {
                 (*op._notification)->set(rocksToMongoStatus(s));
             }
@@ -472,8 +473,8 @@ namespace mongo {
             }
         }
         if (schedule) {
-            log() << "Scheduling compaction to clean up tombstones for cf: " << cf->GetName()
-                  << ", prefix: " << rocksdb::Slice(prefix).ToString(true);
+            LOGV2(0, "Scheduling compaction to clean up tombstones", "cf"_attr = cf->GetName(),
+                  "prefix"_attr = rocksdb::Slice(prefix).ToString(true));
             // we schedule compaction now (ignoring error)
             compactPrefix(cf, prefix);
         }
@@ -541,7 +542,7 @@ namespace mongo {
         // this will copy the set. that way compaction filter has its own copy and doesn't need to
         // worry about thread safety
         std::unordered_map<uint32_t, BSONObj> ret;
-        for (auto p : _droppedPrefixes) {
+        for (const auto& p : _droppedPrefixes) {
             ret.emplace(p.first, p.second.copy());
         }
         return ret;
@@ -573,7 +574,7 @@ namespace mongo {
                 compactDroppedPrefix(cf, prefix.ToString());
             }
         }
-        log() << dropped_count << " dropped prefixes need compaction";
+        LOGV2(0, "Dropped prefixes need compaction", "num"_attr = dropped_count);
 
         const uint32_t skippedDroppedPrefixMarkers =
             (uint32_t)get_internal_delete_skipped_count() - rocksdbSkippedDeletionsInitial;
@@ -596,12 +597,12 @@ namespace mongo {
             auto s = txn->Put(_metaCf, kDroppedPrefix + prefix,
                               rocksdb::Slice(debugInfo.objdata(), debugInfo.objsize()));
             if (!s.ok()) {
-                log() << "dropPrefixesAtomic error: " << s.ToString();
+                LOGV2(0, "dropPrefixesAtomic error", "error"_attr = s.ToString());
                 return rocksToMongoStatus(s);
             }
-            log() << "put into: " << _metaCf->GetName()
-                  << " prefix:" << rocksdb::Slice(prefix).ToString(true)
-                  << " debugInfo:" << debugInfo;
+            LOGV2(0, "put", "info"_attr = _metaCf->GetName(),
+                  "prefix"_attr = rocksdb::Slice(prefix).ToString(true),
+                  "debugInfo"_attr = debugInfo);
         }
 
         auto s = txn->Commit();
@@ -640,8 +641,8 @@ namespace mongo {
                                                           bool opSucceeded) {
         uint32_t int_prefix;
         bool ok = extractPrefix(prefix, &int_prefix);
-        log() << "compact droppedPrefix: " << rocksdb::Slice(prefix).ToString(true)
-              << (opSucceeded ? " success" : " failed");
+        LOGV2(0, "Compact", "droppedPrefix"_attr = rocksdb::Slice(prefix).ToString(true),
+              "succeeded"_attr = opSucceeded ? " success" : " failed");
         invariant(ok);
         {
             stdx::lock_guard<Latch> lk(_droppedDataMutex);
@@ -660,7 +661,7 @@ namespace mongo {
             // compaction next time if needed.
             if (_droppedPrefixesCount.fetch_add(1, std::memory_order_relaxed) >=
                 kSkippedDeletionsThreshold) {
-                log() << "Compacting dropped prefixes markers";
+                LOGV2(0, "Compacting dropped prefixes markers");
                 _droppedPrefixesCount.store(0, std::memory_order_relaxed);
                 // Let's compact the full default (system) prefix 0.
                 compactPrefix(_metaCf, encodePrefix(0));
@@ -684,7 +685,7 @@ namespace mongo {
         _oplogCompactKeep.fetch_add(1, std::memory_order_relaxed);
     }
 
-    const OplogDelCompactStats RocksCompactionScheduler::getOplogDelCompactStats() const {
+    OplogDelCompactStats RocksCompactionScheduler::getOplogDelCompactStats() const {
         OplogDelCompactStats stats;
         stats.oplogEntriesDeleted = _oplogEntriesDeleted.load(std::memory_order_relaxed);
         stats.oplogSizeDeleted = _oplogSizeDeleted.load(std::memory_order_relaxed);
