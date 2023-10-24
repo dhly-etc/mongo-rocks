@@ -155,7 +155,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             wuow.commit();
         }
         ASSERT(!commitTs);
@@ -169,7 +171,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT_OK(opCtx->recoveryUnit()->setTimestamp(ts1));
             ASSERT(!commitTs);
             ASSERT_OK(opCtx->recoveryUnit()->setTimestamp(ts2));
@@ -190,7 +194,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT_OK(opCtx->recoveryUnit()->setTimestamp(ts1));
             ASSERT(!commitTs);
         }
@@ -208,7 +214,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
             wuow.commit();
             ASSERT_EQ(*commitTs, ts1);
@@ -229,7 +237,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
             wuow.commit();
         }
@@ -252,7 +262,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
             wuow.commit();
             ASSERT_EQ(*commitTs, ts1);
@@ -271,7 +283,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
         }
         ASSERT(!commitTs);
@@ -289,7 +303,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
             wuow.commit();
             ASSERT_EQ(*commitTs, ts2);
@@ -300,7 +316,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT_OK(opCtx->recoveryUnit()->setTimestamp(ts1));
             ASSERT_EQ(*commitTs, ts2);
             wuow.commit();
@@ -318,7 +336,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
             ASSERT_OK(opCtx->recoveryUnit()->setTimestamp(ts2));
             ASSERT(!commitTs);
@@ -333,7 +353,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT_EQ(*commitTs, ts2);
             wuow.commit();
             ASSERT_EQ(*commitTs, ts1);
@@ -353,7 +375,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
         }
         ASSERT(!commitTs);
@@ -362,7 +386,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT_OK(opCtx->recoveryUnit()->setTimestamp(ts1));
             ASSERT(!commitTs);
         }
@@ -378,7 +404,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
             ASSERT_OK(opCtx->recoveryUnit()->setTimestamp(ts2));
             ASSERT(!commitTs);
@@ -391,7 +419,9 @@ namespace mongo {
         {
             WriteUnitOfWork wuow(opCtx);
             opCtx->recoveryUnit()->onCommit(
-                [&](boost::optional<Timestamp> commitTime) { commitTs = commitTime; });
+                [&](OperationContext*, boost::optional<Timestamp> commitTime) {
+                    commitTs = commitTime;
+                });
             ASSERT(!commitTs);
         }
         ASSERT(!commitTs);
