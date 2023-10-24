@@ -43,8 +43,7 @@ namespace mongo {
             std::cerr << ret.toString() << std::endl;
             std::cerr << "try '" << context->args()[0] << " --help' for more information"
                       << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            ::_exit(static_cast<int>(ExitCode::badOptions));
         }
-        return Status::OK();
     }
 }  // namespace mongo
