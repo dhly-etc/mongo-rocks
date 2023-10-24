@@ -84,8 +84,6 @@ namespace mongo {
         generateCompactSchedulerSection(&bob);
         generateDefaultCFEntriesNumSection(&bob);
 
-        RocksEngine::appendGlobalStats(bob);
-
         return bob.obj();
     }
 
