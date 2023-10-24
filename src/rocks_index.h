@@ -55,29 +55,33 @@ namespace mongo {
         RocksIndexBase(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
                        const UUID& uuid, std::string ident, Ordering order, const BSONObj& config);
 
-        virtual SortedDataBuilderInterface* getBulkBuilder(OperationContext* opCtx,
-                                                           bool dupsAllowed) = 0;
+        IndexValidateResults validate(OperationContext* opCtx, bool full) const override;
 
-        virtual void fullValidate(OperationContext* opCtx, long long* numKeysOut,
-                                  ValidateResults* fullResults) const;
-
-        virtual bool appendCustomStats(OperationContext* /* opCtx */, BSONObjBuilder* /* output */,
-                                       double /* scale */) const {
+        bool appendCustomStats(OperationContext* /* opCtx */, BSONObjBuilder* /* output */,
+                               double /* scale */) const override {
             // nothing to say here, really
             return false;
         }
 
-        virtual bool isEmpty(OperationContext* opCtx);
+        bool isEmpty(OperationContext* opCtx) override;
 
-        virtual long long getSpaceUsedBytes(OperationContext* opCtx) const;
+        long long getSpaceUsedBytes(OperationContext* opCtx) const override;
 
-        virtual Status initAsEmpty(OperationContext* opCtx);
+        long long getFreeStorageBytes(OperationContext* opCtx) const override;
+
+        void printIndexEntryMetadata(OperationContext* opCtx,
+                                     const key_string::Value& keyString) const override;
+
+        int64_t numEntries(OperationContext* opCtx) const override;
+
+        Status initAsEmpty(OperationContext* opCtx) override;
 
         static void generateConfig(BSONObjBuilder* configBuilder, int formatVersion,
                                    IndexDescriptor::IndexVersion descVersion);
 
     protected:
-        static std::string _makePrefixedKey(const std::string& prefix, const KeyString& encodedKey);
+        static std::string _makePrefixedKey(const std::string& prefix,
+                                            const key_string::Value& encodedKey);
 
         rocksdb::DB* _db;  // not owned
 
@@ -90,10 +94,6 @@ namespace mongo {
         // very approximate index storage size
         std::atomic<long long> _indexStorageSize;
 
-        // used to construct RocksCursors
-        const Ordering _order;
-        KeyString::Version _keyStringVersion;
-
         class StandardBulkBuilder;
         class UniqueBulkBuilder;
         friend class UniqueBulkBuilder;
@@ -103,32 +103,37 @@ namespace mongo {
     public:
         RocksUniqueIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
                          const UUID& uuid, std::string ident, Ordering order, const BSONObj& config,
-                         std::string collectionNamespace, std::string indexName,
-                         const BSONObj& keyPattern, bool partial = false, bool isIdIdx = false);
+                         NamespaceString ns, std::string indexName, const BSONObj& keyPattern,
+                         bool partial = false, bool isIdIdx = false);
 
-        virtual StatusWith<SpecialFormatInserted> insert(OperationContext* opCtx,
-                                                         const BSONObj& key, const RecordId& loc,
-                                                         bool dupsAllowed);
-        virtual void unindex(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
-                             bool dupsAllowed);
-        virtual std::unique_ptr<SortedDataInterface::Cursor> newCursor(OperationContext* opCtx,
-                                                                       bool forward) const;
+        Status insert(OperationContext* opCtx, const key_string::Value& keyString, bool dupsAllowed,
+                      IncludeDuplicateRecordId includeDuplicateRecordId =
+                          IncludeDuplicateRecordId::kOff) override;
 
-        virtual Status dupKeyCheck(OperationContext* opCtx, const BSONObj& key);
+        void unindex(OperationContext* opCtx, const key_string::Value& keyString,
+                     bool dupsAllowed) override;
 
-        virtual SortedDataBuilderInterface* getBulkBuilder(OperationContext* opCtx,
-                                                           bool dupsAllowed) override;
+        boost::optional<RecordId> findLoc(OperationContext* opCtx,
+                                          const key_string::Value& keyString) const override;
+
+        std::unique_ptr<Cursor> newCursor(OperationContext* opCtx,
+                                          bool isForward = true) const override;
+
+        Status dupKeyCheck(OperationContext* opCtx, const key_string::Value& keyString) override;
+
+        std::unique_ptr<SortedDataBuilderInterface> makeBulkBuilder(OperationContext* opCtx,
+                                                                    bool dupsAllowed) override;
+
+        void insertWithRecordIdInValue_forTest(OperationContext* opCtx,
+                                               const key_string::Value& keyString,
+                                               RecordId rid) override;
 
     private:
-        StatusWith<SpecialFormatInserted> _insertTimestampSafe(OperationContext* opCtx,
-                                                               const BSONObj& key,
-                                                               const RecordId& loc,
-                                                               bool dupsAllowed);
+        Status _insertTimestampSafe(OperationContext* opCtx, const BSONObj& key,
+                                    const RecordId& loc, bool dupsAllowed);
 
-        StatusWith<SpecialFormatInserted> _insertTimestampUnsafe(OperationContext* opCtx,
-                                                                 const BSONObj& key,
-                                                                 const RecordId& loc,
-                                                                 bool dupsAllowed);
+        Status _insertTimestampUnsafe(OperationContext* opCtx, const BSONObj& key,
+                                      const RecordId& loc, bool dupsAllowed);
 
         void _unindexTimestampUnsafe(OperationContext* opCtx, const BSONObj& key,
                                      const RecordId& loc, bool dupsAllowed);
@@ -136,9 +141,9 @@ namespace mongo {
         void _unindexTimestampSafe(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
                                    bool dupsAllowed);
 
-        bool _keyExistsTimestampSafe(OperationContext* opCtx, const KeyString& prefixedKey);
+        bool _keyExistsTimestampSafe(OperationContext* opCtx, const key_string::Value& prefixedKey);
 
-        std::string _collectionNamespace;
+        NamespaceString _ns;
         std::string _indexName;
         const BSONObj _keyPattern;
         const bool _partial;
@@ -151,21 +156,31 @@ namespace mongo {
                            const UUID& uuid, std::string ident, Ordering order,
                            const BSONObj& config);
 
-        virtual StatusWith<SpecialFormatInserted> insert(OperationContext* opCtx,
-                                                         const BSONObj& key, const RecordId& loc,
-                                                         bool dupsAllowed);
-        virtual void unindex(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
-                             bool dupsAllowed);
-        virtual std::unique_ptr<SortedDataInterface::Cursor> newCursor(OperationContext* opCtx,
-                                                                       bool forward) const;
-        virtual Status dupKeyCheck(OperationContext* opCtx, const BSONObj& key) {
+        Status insert(OperationContext* opCtx, const key_string::Value& keyString, bool dupsAllowed,
+                      IncludeDuplicateRecordId includeDuplicateRecordId =
+                          IncludeDuplicateRecordId::kOff) override;
+
+        void unindex(OperationContext* opCtx, const key_string::Value& keyString,
+                     bool dupsAllowed) override;
+
+        boost::optional<RecordId> findLoc(OperationContext* opCtx,
+                                          const key_string::Value& keyString) const override;
+
+        std::unique_ptr<Cursor> newCursor(OperationContext* opCtx,
+                                          bool isForward = true) const override;
+
+        Status dupKeyCheck(OperationContext* opCtx, const key_string::Value& keyString) override {
             // dupKeyCheck shouldn't be called for non-unique indexes
             invariant(false);
             return Status::OK();
         }
 
-        virtual SortedDataBuilderInterface* getBulkBuilder(OperationContext* opCtx,
-                                                           bool dupsAllowed) override;
+        std::unique_ptr<SortedDataBuilderInterface> makeBulkBuilder(OperationContext* opCtx,
+                                                                    bool dupsAllowed) override;
+
+        void insertWithRecordIdInValue_forTest(OperationContext* opCtx,
+                                               const key_string::Value& keyString,
+                                               RecordId rid) override;
 
         void enableSingleDelete() { useSingleDelete = true; }
 
