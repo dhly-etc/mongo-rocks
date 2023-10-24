@@ -16,6 +16,8 @@
 
 using std::string;
 
+using namespace mongo;
+
 namespace rocksdb {
 
 #define ASSERT_ROCKS_OK(EXPRESSION) \
