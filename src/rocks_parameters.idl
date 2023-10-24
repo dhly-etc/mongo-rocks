@@ -34,21 +34,6 @@ global:
         - "mongo/util/debug_util.h"
 
 server_parameters:
-    rocksConcurrentWriteTransactions:
-        description: "Rocks Concurrent Write Transactions"
-        set_at: [ startup, runtime ]
-        cpp_class:
-            name: ROpenWriteTransactionParam
-            data: 'TicketHolder*'
-            override_ctor: true
-    rocksConcurrentReadTransactions:
-        description: "Rocks Concurrent Read Transactions"
-        set_at: [ startup, runtime ]
-        cpp_class:
-            name: ROpenReadTransactionParam
-            data: 'TicketHolder*'
-            override_ctor: true
-
     rocksdbRuntimeConfigMaxWriteMBPerSec:
         description: 'rate limiter to MB/s'
         set_at: [ startup, runtime ]
