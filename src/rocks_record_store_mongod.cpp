@@ -41,7 +41,7 @@
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/service_context.h"
-#include "mongo/db/session_txn_record_gen.h"
+#include "mongo/db/session/session_txn_record_gen.h"
 #include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
 #include "mongo/util/background.h"
@@ -56,20 +56,24 @@ namespace mongo {
 
     namespace {
         Timestamp getoldestPrepareTs(OperationContext* opCtx) {
-            auto alterClient = opCtx->getServiceContext()->makeClient("get-oldest-prepared-txn");
+            auto alterClient =
+                opCtx->getServiceContext()->getService()->makeClient("get-oldest-prepared-txn");
             AlternativeClientRegion acr(alterClient);
             const auto tmpOpCtx = cc().makeOperationContext();
             tmpOpCtx->recoveryUnit()->setTimestampReadSource(
                 RecoveryUnit::ReadSource::kNoTimestamp);
             DBDirectClient client(tmpOpCtx.get());
-            Query query = QUERY("txnState"
-                                << "kPrepared")
-                              .sort("lastWriteOpTime", 1);
-            auto c = client.query(NamespaceString::kSessionTransactionsTableNamespace, query, 1);
+
+            FindCommandRequest find{NamespaceString::kSessionTransactionsTableNamespace};
+            find.setFilter(BSON("txnState"
+                                << "kPrepared"));
+            find.setSort(BSON("lastWriteOpTime" << 1));
+
+            auto c = client.find(find);
             if (c->more()) {
                 auto raw = c->next();
                 SessionTxnRecord record =
-                    SessionTxnRecord::parse(IDLParserErrorContext("init prepared txns"), raw);
+                    SessionTxnRecord::parse(IDLParserContext("init prepared txns"), raw);
                 return record.getLastWriteOpTime().getTimestamp();
             }
             return Timestamp::max();
@@ -82,7 +86,7 @@ namespace mongo {
         public:
             RocksRecordStoreThread(const NamespaceString& ns)
                 : BackgroundJob(true /* deleteSelf */), _ns(ns) {
-                _name = std::string("RocksRecordStoreThread-for-") + _ns.toString();
+                _name = std::string("RocksRecordStoreThread-for-") + _ns.toStringForResourceId();
             }
 
             virtual std::string name() const { return _name; }
@@ -92,19 +96,15 @@ namespace mongo {
              */
             bool _deleteExcessDocuments() {
                 if (!getGlobalServiceContext()->getStorageEngine()) {
-                    LOG(1) << "no global storage engine yet";
+                    LOGV2_DEBUG(0, 1, "no global storage engine yet");
                     return false;
                 }
-                auto engine = getGlobalServiceContext()->getStorageEngine();
                 const auto opCtx = cc().makeOperationContext();
 
                 try {
-                    const Timestamp oldestPreparedTxnTs = getoldestPrepareTs(opCtx.get());
                     // A Global IX lock should be good enough to protect the oplog truncation from
-                    // interruptions such as restartCatalog. PBWM, database lock or collection lock
-                    // is not needed. This improves concurrency if oplog truncation takes long time.
-                    ShouldNotConflictWithSecondaryBatchApplicationBlock shouldNotConflictBlock(
-                        opCtx.get()->lockState());
+                    // interruptions such as restartCatalog. Database lock or collection lock is not
+                    // needed. This improves concurrency if oplog truncation takes long time.
                     Lock::GlobalLock lk(opCtx.get(), MODE_IX);
 
                     RocksRecordStore* rs = nullptr;
@@ -113,50 +113,33 @@ namespace mongo {
                         // block other operations on the local database and given the
                         // fact that oplog collection is so special, Global IX lock can
                         // make sure the collection exists.
-                        Lock::DBLock dbLock(opCtx.get(), _ns.db(), MODE_IX);
-                        auto databaseHolder = DatabaseHolder::get(opCtx.get());
-                        auto db = databaseHolder->getDb(opCtx.get(), _ns.db());
-                        if (!db) {
-                            LOG(2) << "no local database yet";
+                        AutoGetOplog oplog{opCtx.get(), OplogAccessMode::kWrite};
+                        if (!oplog.getCollection()) {
+                            LOGV2_DEBUG(0, 2, "no collection", logAttrs(_ns));
                             return false;
                         }
-                        // We need to hold the database lock while getting the collection. Otherwise
-                        // a concurrent collection creation would write to the map in the Database
-                        // object while we concurrently read the map.
-                        Collection* collection = db->getCollection(opCtx.get(), _ns);
-                        if (!collection) {
-                            LOG(2) << "no collection " << _ns;
-                            return false;
-                        }
-                        rs = checked_cast<RocksRecordStore*>(collection->getRecordStore());
+                        rs = checked_cast<RocksRecordStore*>(
+                            oplog.getCollection()->getRecordStore());
                     }
-                    if (!engine->supportsRecoverToStableTimestamp()) {
-                        // For non-RTT storage engines, the oplog can always be truncated.
-                        return rs->reclaimOplog(opCtx.get(), oldestPreparedTxnTs);
-                    }
-                    const auto lastStableCheckpointTsPtr = engine->getLastStableRecoveryTimestamp();
-                    Timestamp lastStableCheckpointTimestamp =
-                        lastStableCheckpointTsPtr ? *lastStableCheckpointTsPtr : Timestamp::min();
-                    Timestamp persistedTimestamp =
-                        std::min(oldestPreparedTxnTs, lastStableCheckpointTimestamp);
-                    return rs->reclaimOplog(opCtx.get(), persistedTimestamp);
+                    rs->reclaimOplog(opCtx.get());
+                    return true;
                 } catch (const ExceptionForCat<ErrorCategory::Interruption>&) {
                     return false;
                 } catch (const std::exception& e) {
-                    severe() << "error in RocksRecordStoreThread: " << redact(e.what());
-                    fassertFailedNoTrace(!"error in RocksRecordStoreThread");
+                    LOGV2_FATAL_NOTRACE(0, "error in RocksRecordStoreThread",
+                                        "error"_attr = redact(e.what()));
                 } catch (...) {
-                    fassertFailedNoTrace(!"unknown error in RocksRecordStoreThread");
+                    LOGV2_FATAL_NOTRACE(0, "unknown error in RocksRecordStoreThread");
                 }
                 MONGO_UNREACHABLE
             }
 
             virtual void run() {
-                ThreadClient tc(_name, getGlobalServiceContext());
+                ThreadClient tc(_name, getGlobalServiceContext()->getService());
 
                 while (!globalInShutdownDeprecated()) {
                     bool removed = _deleteExcessDocuments();
-                    LOG(2) << "RocksRecordStoreThread deleted " << removed;
+                    LOGV2_DEBUG(0, 2, "RocksRecordStoreThread deleted", "removed"_attr = removed);
                     if (!removed) {
                         // If we removed 0 documents, sleep a bit in case we're on a laptop
                         // or something to be nice.
@@ -167,7 +150,7 @@ namespace mongo {
                     }
                 }
 
-                log() << "shutting down";
+                LOGV2(0, "shutting down");
             }
 
         private:
@@ -183,7 +166,8 @@ namespace mongo {
             return false;
         }
 
-        if (storageGlobalParams.repair || storageGlobalParams.readOnly) {
+        // TODO readOnly?
+        if (storageGlobalParams.repair) {
             LOGV2_DEBUG(0, 1,
                         "not starting RocksRecordStoreThread for because we are either in repair "
                         "or read-only mode",
@@ -193,9 +177,9 @@ namespace mongo {
 
         stdx::lock_guard<Latch> lock(_backgroundThreadMutex);
         if (_backgroundThreadNamespaces.count(nss)) {
-            log() << "RocksRecordStoreThread " << nss << " already started";
+            LOGV2(0, "RocksRecordStoreThread already started", logAttrs(nss));
         } else {
-            log() << "Starting RocksRecordStoreThread " << nss;
+            LOGV2(0, "Starting RocksRecordStoreThread", logAttrs(nss));
             BackgroundJob* backgroundThread = new RocksRecordStoreThread(nss);
             backgroundThread->go();
             _backgroundThreadNamespaces.insert(nss);
