@@ -568,7 +568,7 @@ namespace mongo {
                 break;
             }
             case ReadSource::kLastApplied: {
-                if (getSnapshotManager()->getLocalSnapshot()) {
+                if (getSnapshotManager()->getLastApplied()) {
                     _readAtTimestamp = getSnapshotManager()->beginTransactionOnLocalSnapshot(
                         getDB(), &_transaction, _prepareConflictBehavior,
                         _roundUpPreparedTimestamps);
@@ -588,7 +588,7 @@ namespace mongo {
                     _readAtTimestamp = _beginTransactionAtAllDurableTimestamp();
                     break;
                 }
-                // Intentionally continue to the next case to read at the _readAtTimestamp.
+                [[fallthrough]];
             }
             case ReadSource::kProvided: {
                 RocksBeginTxnBlock txnOpen(getDB(), &_transaction, _prepareConflictBehavior,
@@ -623,7 +623,7 @@ namespace mongo {
 
     Timestamp RocksRecoveryUnit::_beginTransactionAtNoOverlapTimestamp(
         std::unique_ptr<rocksdb::TOTransaction>* txn) {
-        auto lastApplied = getSnapshotManager()->getLocalSnapshot();
+        auto lastApplied = getSnapshotManager()->getLastApplied();
         Timestamp allDurable = Timestamp(getOplogManager()->fetchAllDurableValue());
 
         // When using timestamps for reads and writes, it's important that readers and writers don't
