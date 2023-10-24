@@ -29,9 +29,9 @@
 #include "rocks_util.h"
 
 #include <rocksdb/status.h>
-#include <stdarg.h>
-#include <stdio.h>
 
+#include <cstdarg>
+#include <cstdio>
 #include <string>
 
 // Temporary fix for https://github.com/facebook/rocksdb/pull/2336#issuecomment-303226208
