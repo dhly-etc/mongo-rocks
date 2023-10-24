@@ -363,7 +363,7 @@ namespace mongo {
 
     bool RocksRecoveryUnit::waitUntilDurable(OperationContext* opCtx) {
         invariant(!_inUnitOfWork(), toString(_state));
-        getDurabilityManager()->waitUntilDurable(false);
+        getDurabilityManager()->waitUntilDurable(opCtx, false);
         return true;
     }
 
