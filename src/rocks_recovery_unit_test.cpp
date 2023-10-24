@@ -45,11 +45,9 @@
 #include "mongo/db/json.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
-#include "mongo/db/operation_context_noop.h"
 #include "mongo/db/repl/repl_settings.h"
 #include "mongo/db/repl/replication_coordinator_mock.h"
 #include "mongo/db/service_context.h"
-#include "mongo/db/storage/kv/kv_prefix.h"
 #include "mongo/db/storage/recovery_unit_test_harness.h"
 #include "mongo/platform/basic.h"
 #include "mongo/unittest/death_test.h"
@@ -85,10 +83,10 @@ namespace mongo {
             return std::unique_ptr<RecoveryUnit>(_engine.newRecoveryUnit());
         }
 
-        virtual std::unique_ptr<RecordStore> createRecordStore(OperationContext* opCtx,
-                                                               const std::string& ns) final {
+        std::unique_ptr<RecordStore> createRecordStore(OperationContext* opCtx,
+                                                       const std::string& ns) final {
             RocksRecordStore::Params params;
-            params.ns = ns;
+            params.nss = NamespaceString::createNamespaceString_forTest(ns);
             return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), opCtx,
                                                       params);
         }
@@ -100,14 +98,10 @@ namespace mongo {
         RocksEngine _engine;
     };
 
-    std::unique_ptr<HarnessHelper> makeHarnessHelper() {
-        return std::make_unique<RocksRecoveryUnitHarnessHelper>();
-    }
-
     MONGO_INITIALIZER(RegisterHarnessFactory)(InitializerContext* const) {
-        mongo::registerHarnessHelperFactory(makeHarnessHelper);
-        return Status::OK();
-    }
+        mongo::registerRecoveryUnitHarnessHelperFactory(
+            [] { return std::make_unique<RocksRecoveryUnitHarnessHelper>(); });
+    };
 
     class RocksRecoveryUnitTestFixture : public unittest::Test {
     public:
@@ -117,9 +111,9 @@ namespace mongo {
         ClientAndCtx makeClientAndOpCtx(RecoveryUnitHarnessHelper* harnessHelper,
                                         const std::string& clientName) {
             auto sc = harnessHelper->serviceContext();
-            auto client = sc->makeClient(clientName);
+            auto client = sc->getService()->makeClient(clientName);
             auto opCtx = client->makeOperationContext();
-            opCtx->setRecoveryUnit(std::move(harnessHelper->newRecoveryUnit()),
+            opCtx->setRecoveryUnit(harnessHelper->newRecoveryUnit(),
                                    WriteUnitOfWork::RecoveryUnitState::kNotInUnitOfWork);
             return std::make_pair(std::move(client), std::move(opCtx));
         }
@@ -133,14 +127,12 @@ namespace mongo {
         std::unique_ptr<RecoveryUnitHarnessHelper> harnessHelper;
         ClientAndCtx clientAndCtx;
         RocksRecoveryUnit* ru;
-
-    private:
     };
 
     TEST_F(RocksRecoveryUnitTestFixture, SetReadSource) {
         ru->setTimestampReadSource(RecoveryUnit::ReadSource::kProvided, Timestamp(1, 1));
         ASSERT_EQ(RecoveryUnit::ReadSource::kProvided, ru->getTimestampReadSource());
-        ASSERT_EQ(Timestamp(1, 1), ru->getPointInTimeReadTimestamp());
+        ASSERT_EQ(Timestamp(1, 1), ru->getPointInTimeReadTimestamp(clientAndCtx.second.get()));
     }
 
     TEST_F(RocksRecoveryUnitTestFixture, LocalReadOnADocumentBeingPreparedTriggersPrepareConflict) {
@@ -446,7 +438,7 @@ namespace mongo {
     DEATH_TEST_F(RocksRecoveryUnitTestFixture, WaitUntilDurableMustBeOutOfUnitOfWork, "invariant") {
         auto opCtx = clientAndCtx.second.get();
         opCtx->recoveryUnit()->beginUnitOfWork(opCtx);
-        opCtx->recoveryUnit()->waitUntilDurable();
+        opCtx->recoveryUnit()->waitUntilDurable(opCtx);
     }
 
     DEATH_TEST_F(RocksRecoveryUnitTestFixture, AbandonSnapshotMustBeOutOfUnitOfWork, "invariant") {
