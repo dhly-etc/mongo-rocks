@@ -258,13 +258,6 @@ namespace mongo {
 
         void _changeNumRecords(OperationContext* opCtx, int64_t amount);
         void _increaseDataSize(OperationContext* opCtx, int64_t amount);
-        /**
-         * Delete records from this record store as needed while _cappedMaxSize or _cappedMaxDocs is
-         * exceeded.
-         *
-         * _inlock version to be called once a lock has been acquired.
-         */
-        int64_t _cappedDeleteAsNeeded(OperationContext* opCtx, const RecordId& justInserted);
 
     private:
         void _loadCountFromCountManager(OperationContext* opCtx);

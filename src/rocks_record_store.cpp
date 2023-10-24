@@ -446,8 +446,6 @@ namespace mongo {
             _changeNumRecords(opCtx, 1);
             _increaseDataSize(opCtx, len);
 
-            _cappedDeleteAsNeeded(opCtx, loc);
-
             return StatusWith<RecordId>(loc);
         };
 
@@ -481,8 +479,6 @@ namespace mongo {
         invariantRocksOK(ROCKS_OP_CHECK(txn->Put(_cf, key, rocksdb::Slice(data, len))));
 
         _increaseDataSize(opCtx, len - old_length);
-
-        _cappedDeleteAsNeeded(opCtx, loc);
 
         return Status::OK();
     }
@@ -1006,6 +1002,10 @@ namespace mongo {
         return {{_lastLoc, {_seekExactResult.data(), static_cast<int>(_seekExactResult.size())}}};
     }
 
+    boost::optional<Record> RocksRecordStore::Cursor::seekNear(const RecordId& start) {
+        MONGO_UNIMPLEMENTED;  // TODO
+    }
+
     boost::optional<Record> RocksRecordStore::Cursor::seekToLast() {
         _needFirstSeek = false;
         _skipNextAdvance = false;
@@ -1066,6 +1066,10 @@ namespace mongo {
     void RocksRecordStore::Cursor::reattachToOperationContext(OperationContext* opCtx) {
         _opCtx = opCtx;
         // iterator recreated in restore()
+    }
+
+    void RocksRecordStore::Cursor::setSaveStorageCursorOnDetachFromOperationContext(bool) {
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     boost::optional<Record> RocksRecordStore::Cursor::curr() {
