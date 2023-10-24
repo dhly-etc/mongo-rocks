@@ -523,8 +523,7 @@ namespace mongo {
         if (desc->unique()) {
             index = std::make_unique<RocksUniqueIndex>(
                 _db.get(), _defaultCf.get(), prefix, *collOptions.uuid, ident.toString(),
-                Ordering::make(desc->keyPattern()), std::move(config),
-                nss.toStringForResourceId() /* TODO verify correct conversion*/, desc->indexName(),
+                Ordering::make(desc->keyPattern()), std::move(config), nss, desc->indexName(),
                 desc->keyPattern(), desc->isPartial(), desc->isIdIndex());
         } else {
             auto si = std::make_unique<RocksStandardIndex>(
