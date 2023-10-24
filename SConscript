@@ -54,6 +54,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/storage/bson_collection_catalog_entry',
         '$BUILD_DIR/mongo/db/storage/index_entry_comparison',
         '$BUILD_DIR/mongo/db/storage/key_string',
+        '$BUILD_DIR/mongo/db/storage/storage_options',
         '$BUILD_DIR/mongo/util/background_job',
         '$BUILD_DIR/mongo/util/concurrency/ticketholder',
         '$BUILD_DIR/mongo/util/processinfo',
