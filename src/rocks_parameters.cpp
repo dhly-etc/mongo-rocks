@@ -26,6 +26,7 @@
  *    it in the license file.
  */
 
+#include <rocksdb/advanced_cache.h>
 #include <rocksdb/cache.h>
 #include <rocksdb/convenience.h>
 #include <rocksdb/db.h>
@@ -52,59 +53,66 @@ namespace mongo {
             if (newNum <= 0) {
                 return Status(ErrorCodes::BadValue, str::stream() << name << " has to be > 0");
             }
-            log() << "RocksDB: changing rate limiter to " << newNum << "MB/s";
+            LOGV2(0, "RocksDB: changing rate limiter MB/s", "newValue"_attr = newNum);
             engine->setMaxWriteMBPerSec(newNum);
 
             return Status::OK();
         }
     }  // namespace
 
-    void RocksRateLimiterServerParameter::append(OperationContext* opCtx, BSONObjBuilder& b,
-                                                 const std::string& name) {
-        b.append(name, _data->getMaxWriteMBPerSec());
+    void RocksRateLimiterServerParameter::append(OperationContext* opCtx, BSONObjBuilder* b,
+                                                 StringData name,
+                                                 const boost::optional<TenantId>&) {
+        b->append(name, _data->getMaxWriteMBPerSec());
     }
 
-    Status RocksRateLimiterServerParameter::set(const BSONElement& newValueElement) {
+    Status RocksRateLimiterServerParameter::set(const BSONElement& newValueElement,
+                                                const boost::optional<TenantId>&) {
         if (!newValueElement.isNumber()) {
             return Status(ErrorCodes::BadValue, str::stream() << name() << " has to be a number");
         }
         return RocksRateLimiterServerParameterSet(newValueElement.numberInt(), name(), _data);
     }
 
-    Status RocksRateLimiterServerParameter::setFromString(const std::string& str) {
+    Status RocksRateLimiterServerParameter::setFromString(StringData str,
+                                                          const boost::optional<TenantId>&) {
         int num = 0;
-        Status status = parseNumberFromString(str, &num);
+        Status status = NumberParser{}(str, &num);
         if (!status.isOK()) return status;
         return RocksRateLimiterServerParameterSet(num, name(), _data);
     }
 
-    void RocksBackupServerParameter::append(OperationContext* opCtx, BSONObjBuilder& b,
-                                            const std::string& name) {
-        b.append(name, "");
+    void RocksBackupServerParameter::append(OperationContext* opCtx, BSONObjBuilder* b,
+                                            StringData name, const boost::optional<TenantId>&) {
+        b->append(name, "");
     }
 
-    Status RocksBackupServerParameter::set(const BSONElement& newValueElement) {
+    Status RocksBackupServerParameter::set(const BSONElement& newValueElement,
+                                           const boost::optional<TenantId>& tenantId) {
         auto str = newValueElement.str();
         if (str.size() == 0) {
             return Status(ErrorCodes::BadValue, str::stream() << name() << " has to be a string");
         }
-        return setFromString(str);
+        return setFromString(str, tenantId);
     }
 
-    Status RocksBackupServerParameter::setFromString(const std::string& str) {
-        return _data->backup(str);
+    Status RocksBackupServerParameter::setFromString(StringData str,
+                                                     const boost::optional<TenantId>&) {
+        return _data->backup(str.toString());
     }
 
-    void RocksCompactServerParameter::append(OperationContext* opCtx, BSONObjBuilder& b,
-                                             const std::string& name) {
-        b.append(name, "");
+    void RocksCompactServerParameter::append(OperationContext* opCtx, BSONObjBuilder* b,
+                                             StringData name, const boost::optional<TenantId>&) {
+        b->append(name, "");
     }
 
-    Status RocksCompactServerParameter::set(const BSONElement& newValueElement) {
-        return setFromString("");
+    Status RocksCompactServerParameter::set(const BSONElement& newValueElement,
+                                            const boost::optional<TenantId>& tenantId) {
+        return setFromString("", tenantId);
     }
 
-    Status RocksCompactServerParameter::setFromString(const std::string& str) {
+    Status RocksCompactServerParameter::setFromString(StringData str,
+                                                      const boost::optional<TenantId>&) {
         _data->getCompactionScheduler()->compactAll();
         return Status::OK();
     }
@@ -115,7 +123,7 @@ namespace mongo {
             if (newNum <= 0) {
                 return Status(ErrorCodes::BadValue, str::stream() << name << " has to be > 0");
             }
-            log() << "RocksDB: changing block cache size to " << newNum << "GB";
+            LOGV2(0, "RocksDB: changing block cache size GB", "newValue"_attr = newNum);
             const long long bytesInGB = 1024 * 1024 * 1024LL;
             size_t newSizeInBytes = static_cast<size_t>(newNum * bytesInGB);
             engine->getBlockCache()->SetCapacity(newSizeInBytes);
@@ -124,36 +132,38 @@ namespace mongo {
         }
     }  // namespace
 
-    void RocksCacheSizeParameter::append(OperationContext* opCtx, BSONObjBuilder& b,
-                                         const std::string& name) {
+    void RocksCacheSizeParameter::append(OperationContext* opCtx, BSONObjBuilder* b,
+                                         StringData name, const boost::optional<TenantId>&) {
         const long long bytesInGB = 1024 * 1024 * 1024LL;
         long long cacheSizeInGB = _data->getBlockCache()->GetCapacity() / bytesInGB;
-        b.append(name, cacheSizeInGB);
+        b->append(name, cacheSizeInGB);
     }
 
-    Status RocksCacheSizeParameter::set(const BSONElement& newValueElement) {
+    Status RocksCacheSizeParameter::set(const BSONElement& newValueElement,
+                                        const boost::optional<TenantId>&) {
         if (!newValueElement.isNumber()) {
             return Status(ErrorCodes::BadValue, str::stream() << name() << " has to be a number");
         }
         return RocksCacheSizeParameterSet(newValueElement.numberInt(), name(), _data);
     }
 
-    Status RocksCacheSizeParameter::setFromString(const std::string& str) {
+    Status RocksCacheSizeParameter::setFromString(StringData str,
+                                                  const boost::optional<TenantId>&) {
         int num = 0;
-        Status status = parseNumberFromString(str, &num);
+        Status status = NumberParser{}(str, &num);
         if (!status.isOK()) return status;
         return RocksCacheSizeParameterSet(num, name(), _data);
     }
 
-    void RocksOptionsParameter::append(OperationContext* opCtx, BSONObjBuilder& b,
-                                       const std::string& name) {
+    void RocksOptionsParameter::append(OperationContext* opCtx, BSONObjBuilder* b, StringData name,
+                                       const boost::optional<TenantId>&) {
         std::string columnOptions;
         std::string dbOptions;
         std::string fullOptionsStr;
         rocksdb::Options fullOptions = _data->getDB()->GetOptions();
         rocksdb::Status s = GetStringFromColumnFamilyOptions(&columnOptions, fullOptions);
         if (!s.ok()) {  // If we failed, append the error for the user to see.
-            b.append(name, s.ToString());
+            b->append(name, s.ToString());
             return;
         }
 
@@ -161,25 +171,26 @@ namespace mongo {
 
         s = GetStringFromDBOptions(&dbOptions, fullOptions);
         if (!s.ok()) {  // If we failed, append the error for the user to see.
-            b.append(name, s.ToString());
+            b->append(name, s.ToString());
             return;
         }
 
         fullOptionsStr.append(dbOptions);
 
-        b.append(name, fullOptionsStr);
+        b->append(name, fullOptionsStr);
     }
 
-    Status RocksOptionsParameter::set(const BSONElement& newValueElement) {
+    Status RocksOptionsParameter::set(const BSONElement& newValueElement,
+                                      const boost::optional<TenantId>& tenantId) {
         // In case the BSON element is not a string, the conversion will fail,
         // raising an exception catched by the outer layer.
         // Which will generate an error message that looks like this:
         // wrong type for field (rocksdbOptions) 3 != 2
-        return setFromString(newValueElement.String());
+        return setFromString(newValueElement.String(), tenantId);
     }
 
-    Status RocksOptionsParameter::setFromString(const std::string& str) {
-        log() << "RocksDB: Attempting to apply settings: " << str;
+    Status RocksOptionsParameter::setFromString(StringData str, const boost::optional<TenantId>&) {
+        LOGV2(0, "RocksDB: Attempting to apply settings", "settings"_attr = str);
         std::set<std::string> supported_db_options = {"db_write_buffer_size", "delayed_write_rate",
                                                       "max_background_jobs", "max_total_wal_size"};
 
@@ -190,7 +201,7 @@ namespace mongo {
                                                       "soft_pending_compaction_bytes_limit",
                                                       "hard_pending_compaction_bytes_limit"};
         std::unordered_map<std::string, std::string> optionsMap;
-        rocksdb::Status s = rocksdb::StringToMap(str, &optionsMap);
+        rocksdb::Status s = rocksdb::StringToMap(str.toString(), &optionsMap);
         if (!s.ok()) {
             return Status(ErrorCodes::BadValue, s.ToString());
         }
@@ -210,23 +221,26 @@ namespace mongo {
         return Status::OK();
     }
 
-    void RocksdbMaxConflictCheckSizeParameter::append(OperationContext* opCtx, BSONObjBuilder& b,
-                                                      const std::string& name) {
-        b << name << rocksGlobalOptions.maxConflictCheckSizeMB;
+    void RocksdbMaxConflictCheckSizeParameter::append(OperationContext* opCtx, BSONObjBuilder* b,
+                                                      StringData name,
+                                                      const boost::optional<TenantId>&) {
+        *b << name << rocksGlobalOptions.maxConflictCheckSizeMB;
     }
 
-    Status RocksdbMaxConflictCheckSizeParameter::set(const BSONElement& newValueElement) {
-        return setFromString(newValueElement.toString(false));
+    Status RocksdbMaxConflictCheckSizeParameter::set(const BSONElement& newValueElement,
+                                                     const boost::optional<TenantId>& tenantId) {
+        return setFromString(newValueElement.toString(false), tenantId);
     }
 
-    Status RocksdbMaxConflictCheckSizeParameter::setFromString(const std::string& str) {
-        std::string trimStr;
+    Status RocksdbMaxConflictCheckSizeParameter::setFromString(StringData str,
+                                                               const boost::optional<TenantId>&) {
+        StringData trimStr;
         size_t pos = str.find('.');
         if (pos != std::string::npos) {
             trimStr = str.substr(0, pos);
         }
         int newValue;
-        Status status = parseNumberFromString(trimStr, &newValue);
+        Status status = NumberParser{}(trimStr, &newValue);
         if (!status.isOK()) {
             return status;
         }
