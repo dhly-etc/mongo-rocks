@@ -49,7 +49,7 @@ namespace mongo {
     }
 
     // TODO(cuixin): rtt should modify waitUntilDurable
-    void RocksDurabilityManager::waitUntilDurable(bool forceFlush) {
+    void RocksDurabilityManager::waitUntilDurable(OperationContext* opCtx, bool forceFlush) {
         uint32_t start = _lastSyncTime.load();
         // Do the remainder in a critical section that ensures only a single thread at a time
         // will attempt to synchronize.
@@ -63,7 +63,7 @@ namespace mongo {
 
         stdx::unique_lock<Latch> jlk(_journalListenerMutex);
         if (_journalListener) {
-            JournalListener::Token token = _journalListener->getToken();
+            JournalListener::Token token = _journalListener->getToken(opCtx);
             if (!_durable || forceFlush) {
                 invariantRocksOK(_db->Flush(rocksdb::FlushOptions(), {_defaultCf, _oplogCf}));
             } else {

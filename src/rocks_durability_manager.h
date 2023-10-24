@@ -52,7 +52,7 @@ namespace mongo {
 
         void setJournalListener(JournalListener* jl);
 
-        void waitUntilDurable(bool forceFlush);
+        void waitUntilDurable(OperationContext* opCtx, bool forceFlush);
 
         /**
          * Waits until a prepared unit of work has ended (either been commited or aborted). This
