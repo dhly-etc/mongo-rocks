@@ -66,18 +66,18 @@ namespace mongo {
                 RocksIndexBase::generateConfig(&configBuilder, 3,
                                                IndexDescriptor::IndexVersion::kV2);
                 if (unique) {
-                    return stdx::make_unique<RocksUniqueIndex>(
+                    return std::make_unique<RocksUniqueIndex>(
                         _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", "ident", _order,
                         configBuilder.obj(), "test.rocks", "testIndex", BSONObj(), partial);
                 } else {
-                    return stdx::make_unique<RocksStandardIndex>(
+                    return std::make_unique<RocksStandardIndex>(
                         _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", "ident", _order,
                         configBuilder.obj());
                 }
             }
 
             std::unique_ptr<RecoveryUnit> newRecoveryUnit() final {
-                return stdx::make_unique<RocksRecoveryUnit>(true /* durale */, &_engine);
+                return std::make_unique<RocksRecoveryUnit>(true /* durale */, &_engine);
             }
 
         private:
@@ -87,7 +87,7 @@ namespace mongo {
         };
 
         std::unique_ptr<HarnessHelper> makeHarnessHelper() {
-            return stdx::make_unique<RocksIndexHarness>();
+            return std::make_unique<RocksIndexHarness>();
         }
 
         MONGO_INITIALIZER(RegisterHarnessFactory)(InitializerContext* const) {

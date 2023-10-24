@@ -89,8 +89,8 @@ namespace mongo {
                                                                const std::string& ns) final {
             RocksRecordStore::Params params;
             params.ns = ns;
-            return stdx::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), opCtx,
-                                                       params);
+            return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), opCtx,
+                                                      params);
         }
 
     private:
@@ -101,7 +101,7 @@ namespace mongo {
     };
 
     std::unique_ptr<HarnessHelper> makeHarnessHelper() {
-        return stdx::make_unique<RocksRecoveryUnitHarnessHelper>();
+        return std::make_unique<RocksRecoveryUnitHarnessHelper>();
     }
 
     MONGO_INITIALIZER(RegisterHarnessFactory)(InitializerContext* const) {
