@@ -74,13 +74,13 @@ namespace mongo {
         int attempts = 1;
         // If we return from this function, we have either returned successfully or we've
         // returned an error other than conflict. Reset PrepareConflictTracker accordingly.
-        ON_BLOCK_EXIT([opCtx] { PrepareConflictTracker::get(opCtx).endPrepareConflict(); });
+        ON_BLOCK_EXIT([opCtx] { PrepareConflictTracker::get(opCtx).endPrepareConflict(opCtx); });
         // If the failpoint is enabled, don't call the function, just simulate a conflict.
         rocksdb::Status s = RocksPrepareConflictForReads.shouldFail() ? rocksdb::PrepareConflict()
                                                                       : ROCKS_READ_CHECK(f());
         if (!IsPrepareConflict(s)) return s;
 
-        PrepareConflictTracker::get(opCtx).beginPrepareConflict();
+        PrepareConflictTracker::get(opCtx).beginPrepareConflict(opCtx);
 
         // It is contradictory to be running into a prepare conflict when we are ignoring
         // interruptions, particularly when running code inside an

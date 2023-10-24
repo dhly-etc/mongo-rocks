@@ -51,7 +51,7 @@ namespace mongo {
     }
 
     void rocksPrepareConflictFailPointLog() {
-        log() << "RocksPrintPrepareConflictLog fail point enabled.";
+        LOGV2(0, "RocksPrintPrepareConflictLog fail point enabled");
     }
 
 }  // namespace mongo
