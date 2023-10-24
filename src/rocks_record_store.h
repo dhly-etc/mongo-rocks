@@ -55,6 +55,14 @@
     (((RocksWriteConflictException.shouldFail())) ? (rocksdb::Status::Busy("failpoint simulate")) \
                                                   : (x))
 
+/**
+ * Identical to ROCKS_OP_CHECK except this is checked on cursor seeks/advancement.
+ */
+#define ROCKS_READ_CHECK(x)                               \
+    (((RocksWriteConflictExceptionForReads.shouldFail())) \
+         ? (rocksdb::Status::Busy("failpoint simulate"))  \
+         : (x))
+
 namespace rocksdb {
     class TOTransactionDB;
     class Iterator;
