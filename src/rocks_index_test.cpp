@@ -61,19 +61,34 @@ namespace mongo {
 
             virtual ~RocksIndexHarness() {}
 
-            std::unique_ptr<SortedDataInterface> newSortedDataInterface(bool unique, bool partial) {
+            std::unique_ptr<SortedDataInterface> newSortedDataInterface(bool unique, bool partial,
+                                                                        KeyFormat keyFormat) {
                 BSONObjBuilder configBuilder;
                 RocksIndexBase::generateConfig(&configBuilder, 3,
                                                IndexDescriptor::IndexVersion::kV2);
                 if (unique) {
                     return std::make_unique<RocksUniqueIndex>(
-                        _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", "ident", _order,
-                        configBuilder.obj(), "test.rocks", "testIndex", BSONObj(), partial);
+                        _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", UUID::gen(),
+                        "ident", _order, configBuilder.obj(),
+                        NamespaceString::createNamespaceString_forTest("test.rocks"), "testIndex",
+                        BSONObj(), partial);
                 } else {
                     return std::make_unique<RocksStandardIndex>(
-                        _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", "ident", _order,
-                        configBuilder.obj());
+                        _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", UUID::gen(),
+                        "ident", _order, configBuilder.obj());
                 }
+            }
+
+            std::unique_ptr<SortedDataInterface> newIdIndexSortedDataInterface() {
+                BSONObjBuilder configBuilder;
+                RocksIndexBase::generateConfig(&configBuilder, 3,
+                                               IndexDescriptor::IndexVersion::kV2);
+
+                return std::make_unique<RocksUniqueIndex>(
+                    _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", UUID::gen(), "ident",
+                    _order, configBuilder.obj(),
+                    NamespaceString::createNamespaceString_forTest("test.rocks"), "_id_",
+                    BSON("_id" << 1), false, true);
             }
 
             std::unique_ptr<RecoveryUnit> newRecoveryUnit() final {
@@ -86,13 +101,9 @@ namespace mongo {
             RocksEngine _engine;
         };
 
-        std::unique_ptr<HarnessHelper> makeHarnessHelper() {
-            return std::make_unique<RocksIndexHarness>();
-        }
-
-        MONGO_INITIALIZER(RegisterHarnessFactory)(InitializerContext* const) {
-            mongo::registerHarnessHelperFactory(makeHarnessHelper);
-            return Status::OK();
+        MONGO_INITIALIZER(RegisterSortedDataInterfaceHarnessFactory)(InitializerContext* const) {
+            registerSortedDataInterfaceHarnessHelperFactory(
+                [] { return std::make_unique<RocksIndexHarness>(); });
         }
 
     }  // namespace
