@@ -45,12 +45,10 @@
 #include "mongo/db/json.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction.h"
 #include "mongo/db/modules/rocks/src/totdb/totransaction_db.h"
-#include "mongo/db/operation_context_noop.h"
 #include "mongo/db/repl/repl_settings.h"
 #include "mongo/db/repl/replication_coordinator_mock.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/storage/kv/kv_engine_test_harness.h"
-#include "mongo/db/storage/kv/kv_prefix.h"
 #include "mongo/db/storage/record_store_test_harness.h"
 #include "mongo/platform/basic.h"
 #include "mongo/unittest/temp_dir.h"
@@ -65,11 +63,9 @@
 
 namespace mongo {
 
-    using std::string;
-
     class RocksHarnessHelper final : public RecordStoreHarnessHelper {
     public:
-        RocksHarnessHelper()
+        RocksHarnessHelper(RecordStoreHarnessHelper::Options options)
             : _dbpath("rocks_test"),
               _engine(_dbpath.path(), true /* durable */, 3 /* kRocksFormatVersion */,
                       false /* readOnly */) {
@@ -80,52 +76,49 @@ namespace mongo {
 
         virtual ~RocksHarnessHelper() {}
 
-        virtual std::unique_ptr<RecordStore> newNonCappedRecordStore() {
-            return newNonCappedRecordStore("a.b");
+        std::unique_ptr<RecordStore> newRecordStore() override {
+            return newRecordStore("a.b", CollectionOptions{});
         }
 
-        std::unique_ptr<RecordStore> newNonCappedRecordStore(const std::string& ns) {
-            RocksRecoveryUnit* ru = dynamic_cast<RocksRecoveryUnit*>(_engine.newRecoveryUnit());
-            OperationContextNoop opCtx(ru);
+        std::unique_ptr<RecordStore> newRecordStore(
+            const std::string& ns, const CollectionOptions& options,
+            KeyFormat keyFormat = KeyFormat::Long) override {
+            auto opCtx = newOperationContext();
+
             RocksRecordStore::Params params;
-            params.ns = ns;
+            params.nss = NamespaceString::createNamespaceString_forTest(ns);
             params.ident = "1";
             params.prefix = "prefix";
-            params.isCapped = false;
-            params.cappedMaxSize = -1;
-            params.cappedMaxDocs = -1;
-            return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), &opCtx,
-                                                      params);
+            params.isCapped = options.capped;
+            params.cappedMaxSize = options.cappedSize;
+            params.cappedMaxDocs = options.cappedMaxDocs;
+
+            return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns),
+                                                      opCtx.get(), params);
         }
 
-        std::unique_ptr<RecordStore> newCappedRecordStore(int64_t cappedMaxSize,
-                                                          int64_t cappedMaxDocs) final {
-            return newCappedRecordStore("a.b", cappedMaxSize, cappedMaxDocs);
-        }
+        std::unique_ptr<RecordStore> newOplogRecordStore() override {
+            auto opCtx = newOperationContext();
 
-        std::unique_ptr<RecordStore> newCappedRecordStore(const std::string& ns,
-                                                          int64_t cappedMaxSize,
-                                                          int64_t cappedMaxDocs) {
-            RocksRecoveryUnit* ru = dynamic_cast<RocksRecoveryUnit*>(_engine.newRecoveryUnit());
-            OperationContextNoop opCtx(ru);
-            struct RocksRecordStore::Params params;
-            params.ns = ns;
+            RocksRecordStore::Params params;
+            params.nss = NamespaceString::kRsOplogNamespace;
             params.ident = "1";
             params.prefix = "prefix";
             params.isCapped = true;
-            params.cappedMaxSize = cappedMaxSize;
-            params.cappedMaxDocs = cappedMaxDocs;
-            return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), &opCtx,
-                                                      params);
+            params.cappedMaxSize = 1024 * 1024 * 1024;
+
+            auto rs = std::make_unique<RocksRecordStore>(
+                &_engine, _engine.getCf_ForTest(params.nss.toStringForResourceId()), opCtx.get(),
+                params);
+            _engine.startOplogManager(opCtx.get(), rs.get());
+            return rs;
         }
 
-        std::unique_ptr<RecoveryUnit> newRecoveryUnit() final {
+        KVEngine* getEngine() override { return &_engine; }
+
+        std::unique_ptr<RecoveryUnit> newRecoveryUnit() {
             return std::unique_ptr<RecoveryUnit>(_engine.newRecoveryUnit());
         }
-
-        bool supportsDocLocking() final { return true; }
-
-        RocksEngine* getEngine() { return &_engine; }
 
     private:
         unittest::TempDir _dbpath;
@@ -134,18 +127,16 @@ namespace mongo {
         RocksEngine _engine;
     };
 
-    std::unique_ptr<HarnessHelper> makeHarnessHelper() {
-        return std::make_unique<RocksHarnessHelper>();
-    }
-
-    MONGO_INITIALIZER(RegisterHarnessFactory)(InitializerContext* const) {
-        mongo::registerHarnessHelperFactory(makeHarnessHelper);
-        return Status::OK();
+    MONGO_INITIALIZER(RegisterRecordStoreHarnessFactory)(InitializerContext* const) {
+        mongo::registerRecordStoreHarnessHelperFactory(
+            [](RecordStoreHarnessHelper::Options options) {
+                return std::make_unique<RocksHarnessHelper>(options);
+            });
     }
 
     TEST(RocksRecordStoreTest, CounterManager1) {
-        std::unique_ptr<RocksHarnessHelper> harnessHelper(new RocksHarnessHelper());
-        std::unique_ptr<RecordStore> rs(harnessHelper->newNonCappedRecordStore());
+        auto harnessHelper = newRecordStoreHarnessHelper();
+        std::unique_ptr<RecordStore> rs(harnessHelper->newRecordStore());
 
         int N = 12;
 
@@ -168,7 +159,7 @@ namespace mongo {
 
         {
             ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
-            rs = harnessHelper->newNonCappedRecordStore();
+            rs = harnessHelper->newRecordStore();
             ASSERT_EQUALS(N, rs->numRecords(opCtx.get()));
         }
         rs.reset(nullptr);  // this has to be deleted before ss
