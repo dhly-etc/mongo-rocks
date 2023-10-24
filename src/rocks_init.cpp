@@ -51,8 +51,9 @@ namespace mongo {
         class RocksFactory : public StorageEngine::Factory {
         public:
             virtual ~RocksFactory() {}
-            virtual StorageEngine* create(const StorageGlobalParams& params,
-                                          const StorageEngineLockFile* lockFile) const {
+            std::unique_ptr<StorageEngine> create(
+                OperationContext* opCtx, const StorageGlobalParams& params,
+                const StorageEngineLockFile* lockFile) const override {
                 StorageEngineOptions options;
                 options.directoryPerDB = params.directoryperdb;
                 options.forRepair = params.repair;
@@ -62,10 +63,11 @@ namespace mongo {
                     // it's a new database, set it to the newest rocksdb version kRocksFormatVersion
                     formatVersion = kRocksFormatVersion;
                 }
-                auto engine = new RocksEngine(params.dbpath + "/db", params.dur, formatVersion,
-                                              params.readOnly);
+                auto engine =
+                    std::make_unique<RocksEngine>(params.dbpath + "/db", true /* durable TODO */,
+                                                  formatVersion, false /* readOnly TODO */);
                 // Intentionally leaked.
-                auto leaked __attribute__((unused)) = new RocksServerStatusSection(engine);
+                auto leaked __attribute__((unused)) = new RocksServerStatusSection(engine.get());
                 auto leaked2 __attribute__((unused)) = new RocksRateLimiterServerParameter(
                     "rocksdbRateLimiter", ServerParameterType::kRuntimeOnly);
                 auto leaked3 __attribute__((unused)) = new RocksBackupServerParameter(
@@ -78,14 +80,14 @@ namespace mongo {
                     new RocksOptionsParameter("rocksdbOptions", ServerParameterType::kRuntimeOnly);
                 auto leaked7 __attribute__((unused)) = new RocksdbMaxConflictCheckSizeParameter(
                     "rocksdbRuntimeConfigMaxWriteMBPerSec", ServerParameterType::kRuntimeOnly);
-                leaked2->_data = engine;
-                leaked3->_data = engine;
-                leaked4->_data = engine;
-                leaked5->_data = engine;
-                leaked6->_data = engine;
-                leaked7->_data = engine;
+                leaked2->_data = engine.get();
+                leaked3->_data = engine.get();
+                leaked4->_data = engine.get();
+                leaked5->_data = engine.get();
+                leaked6->_data = engine.get();
+                leaked7->_data = engine.get();
 
-                return new StorageEngineImpl(engine, options);
+                return std::make_unique<StorageEngineImpl>(opCtx, std::move(engine), options);
             }
 
             virtual StringData getCanonicalName() const { return kRocksDBEngineName; }
@@ -130,8 +132,6 @@ namespace mongo {
                 builder.append(kRocksFormatVersionString, kRocksFormatVersion);
                 return builder.obj();
             }
-
-            bool supportsReadOnly() const final { return false; }
 
         private:
             // Current disk format. We bump this number when we change the disk format. MongoDB will
