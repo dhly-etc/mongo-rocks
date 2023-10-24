@@ -90,4 +90,20 @@ namespace mongo {
         return *_committedSnapshot;
     }
 
+    Timestamp RocksSnapshotManager::beginTransactionOnLocalSnapshot(
+        rocksdb::TOTransactionDB* db, std::unique_ptr<rocksdb::TOTransaction>* txn,
+        PrepareConflictBehavior prepareConflictBehavior,
+        RoundUpPreparedTimestamps roundUpPreparedTimestamps) const {
+        RocksBeginTxnBlock txnOpen(db, txn, prepareConflictBehavior, roundUpPreparedTimestamps);
+        stdx::lock_guard<Latch> lock(_lastAppliedMutex);
+        invariant(_lastApplied);
+        LOGV2_DEBUG(0, 3, "begin_transaction on local snapshot",
+                    "lastApplied"_attr = _lastApplied.get().toString());
+        auto status = txnOpen.setReadSnapshot(_lastApplied.get());
+        invariant(status.isOK(), status.reason());
+
+        txnOpen.done();
+        return *_lastApplied;
+    }
+
 }  // namespace mongo
