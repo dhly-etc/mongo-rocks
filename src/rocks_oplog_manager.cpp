@@ -72,7 +72,7 @@ namespace mongo {
             // resetting
             // visibility to the truncate point. In the event of a primary crashing, it will perform
             // rollback before servicing oplog reads.
-            auto oplogVisibility = Timestamp(lastRecord->id.repr());
+            auto oplogVisibility = Timestamp(lastRecord->id.getLong());
             setOplogReadTimestamp(oplogVisibility);
             LOGV2_DEBUG(0, 1, "Setting oplog visibility at startup",
                         "value"_attr = oplogVisibility);
@@ -106,7 +106,7 @@ namespace mongo {
 
     void RocksOplogManager::waitForAllEarlierOplogWritesToBeVisible(
         const RocksRecordStore* oplogRecordStore, OperationContext* opCtx) {
-        invariant(opCtx->lockState()->isNoop() || !opCtx->lockState()->inAWriteUnitOfWork());
+        invariant(!opCtx->lockState()->inAWriteUnitOfWork());
 
         // In order to reliably detect rollback situations, we need to fetch the
         // latestVisibleTimestamp
@@ -133,7 +133,7 @@ namespace mongo {
         // excessively.
         _opsWaitingForVisibility++;
         invariant(_opsWaitingForVisibility > 0);
-        auto exitGuard = makeGuard([&] { _opsWaitingForVisibility--; });
+        auto exitGuard = ScopeGuard([&] { _opsWaitingForVisibility--; });
 
         opCtx->waitForConditionOrInterrupt(_opsBecameVisibleCV, lk, [&] {
             auto newLatestVisibleTimestamp = getOplogReadTimestamp();
@@ -172,7 +172,8 @@ namespace mongo {
     }
 
     void RocksOplogManager::_oplogJournalThreadLoop(RocksRecordStore* oplogRecordStore) noexcept {
-        Client::initThread("RocksOplogJournalThread");
+        Client::initThread("RocksOplogJournalThread", getGlobalServiceContext()->getService());
+        auto opCtx = Client::getCurrent()->makeOperationContext();
 
         // This thread updates the oplog read timestamp, the timestamp used to read from the oplog
         // with
@@ -224,7 +225,7 @@ namespace mongo {
             }
 
             if (_shuttingDown) {
-                log() << "Oplog journal thread loop shutting down";
+                LOGV2(0, "Oplog journal thread loop shutting down");
                 return;
             }
             invariant(_opsWaitingForJournal);
@@ -244,7 +245,7 @@ namespace mongo {
 
             // In order to avoid oplog holes after an unclean shutdown, we must ensure this proposed
             // oplog read timestamp's documents are durable before publishing that timestamp.
-            _durabilityManager->waitUntilDurable(false);
+            _durabilityManager->waitUntilDurable(opCtx.get(), false);
 
             lk.lock();
             // Publish the new timestamp value.  Avoid going backward.
