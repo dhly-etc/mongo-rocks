@@ -55,6 +55,9 @@ namespace mongo {
         RocksIndexBase(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
                        const UUID& uuid, std::string ident, Ordering order, const BSONObj& config);
 
+        boost::optional<RecordId> findLoc(OperationContext* opCtx,
+                                          const key_string::Value& keyString) const override;
+
         IndexValidateResults validate(OperationContext* opCtx, bool full) const override;
 
         bool appendCustomStats(OperationContext* /* opCtx */, BSONObjBuilder* /* output */,
@@ -113,9 +116,6 @@ namespace mongo {
         void unindex(OperationContext* opCtx, const key_string::Value& keyString,
                      bool dupsAllowed) override;
 
-        boost::optional<RecordId> findLoc(OperationContext* opCtx,
-                                          const key_string::Value& keyString) const override;
-
         std::unique_ptr<Cursor> newCursor(OperationContext* opCtx,
                                           bool isForward = true) const override;
 
@@ -162,9 +162,6 @@ namespace mongo {
 
         void unindex(OperationContext* opCtx, const key_string::Value& keyString,
                      bool dupsAllowed) override;
-
-        boost::optional<RecordId> findLoc(OperationContext* opCtx,
-                                          const key_string::Value& keyString) const override;
 
         std::unique_ptr<Cursor> newCursor(OperationContext* opCtx,
                                           bool isForward = true) const override;

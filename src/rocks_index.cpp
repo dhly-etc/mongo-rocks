@@ -658,6 +658,31 @@ namespace mongo {
         _indexStorageSize.store(static_cast<long long>(storageSize), std::memory_order_relaxed);
     }
 
+    boost::optional<RecordId> RocksIndexBase::findLoc(OperationContext* opCtx,
+                                                      const key_string::Value& key) const {
+        dassert(key_string::decodeDiscriminator(key.getBuffer(), key.getSize(), getOrdering(),
+                                                key.getTypeBits()) ==
+                key_string::Discriminator::kInclusive);
+
+        auto cursor = newCursor(opCtx);
+        auto ksEntry = cursor->seekForKeyString(key);
+        if (!ksEntry) {
+            return boost::none;
+        }
+
+        auto sizeWithoutRecordId =
+            KeyFormat::Long == _rsKeyFormat
+                ? key_string::sizeWithoutRecordIdLongAtEnd(ksEntry->keyString.getBuffer(),
+                                                           ksEntry->keyString.getSize())
+                : key_string::sizeWithoutRecordIdStrAtEnd(ksEntry->keyString.getBuffer(),
+                                                          ksEntry->keyString.getSize());
+        if (key_string::compare(ksEntry->keyString.getBuffer(), key.getBuffer(),
+                                sizeWithoutRecordId, key.getSize()) == 0) {
+            return ksEntry->loc;
+        }
+        return boost::none;
+    }
+
     bool RocksIndexBase::isEmpty(OperationContext* opCtx) {
         auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
         std::unique_ptr<rocksdb::Iterator> it(ru->NewIterator(_cf, _prefix));
@@ -1002,11 +1027,6 @@ namespace mongo {
                                     std::memory_order_relaxed);
     }
 
-    boost::optional<RecordId> RocksUniqueIndex::findLoc(OperationContext* opCtx,
-                                                        const key_string::Value& keyString) const {
-        MONGO_UNIMPLEMENTED;  // TODO
-    }
-
     Status RocksUniqueIndex::dupKeyCheck(OperationContext* opCtx,
                                          const key_string::Value& keyString) {
         if (!_isIdIndex) {
@@ -1103,11 +1123,6 @@ namespace mongo {
         invariantRocksOK(ROCKS_OP_CHECK(transaction->Delete(_cf, prefixedKey)));
         _indexStorageSize.fetch_sub(static_cast<long long>(prefixedKey.size()),
                                     std::memory_order_relaxed);
-    }
-
-    boost::optional<RecordId> RocksStandardIndex::findLoc(
-        OperationContext* opCtx, const key_string::Value& keyString) const {
-        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     std::unique_ptr<SortedDataInterface::Cursor> RocksStandardIndex::newCursor(
