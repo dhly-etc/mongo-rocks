@@ -166,7 +166,14 @@ namespace mongo {
             }
 
             virtual void SeekForPrev(const rocksdb::Slice& target) {
-                // TODO(wolfkdy): impl
+                startOp();
+                std::unique_ptr<char[]> buffer(new char[_prefix.size() + target.size()]);
+                memcpy(buffer.get(), _prefix.data(), _prefix.size());
+                memcpy(buffer.get() + _prefix.size(), target.data(), target.size());
+                auto key = rocksdb::Slice(buffer.get(), _prefix.size() + target.size());
+                _baseIterator->SeekForPrev(
+                    rocksdb::Slice(buffer.get(), _prefix.size() + target.size()));
+                endOp();
             }
 
             virtual rocksdb::Slice key() const {

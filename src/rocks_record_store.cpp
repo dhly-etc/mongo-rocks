@@ -1047,26 +1047,35 @@ namespace mongo {
     }
 
     boost::optional<Record> RocksRecordStore::Cursor::seekNear(const RecordId& start) {
-        if (_oplogVisibleTs && start.getLong() > *_oplogVisibleTs) {
-            _eof = true;
-            return {};
+        auto id = start;
+        if (_oplogVisibleTs && id.getLong() > *_oplogVisibleTs) {
+            id = RecordId{*_oplogVisibleTs};
         }
         _needFirstSeek = false;
         _skipNextAdvance = false;
         _iterator.reset();
 
-        auto key = _makePrefixedKey(_prefix, start, _keyFormat);
-        auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx);
-        auto it = ru->NewIterator(_cf, _prefix);
+        int64_t storage;
+        auto key = _makeKey(start, _keyFormat, &storage);
+        auto it =
+            RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx)->NewIterator(_cf, _prefix, _isOplog);
 
         auto status = rocksPrepareConflictRetry(_opCtx, [&] {
-            it->SeekForPrev(key);
+            if (_forward) {
+                it->SeekForPrev(key);
+            } else {
+                it->Seek(key);
+            }
             return it->status();
         });
 
         if (!it->Valid()) {
             status = rocksPrepareConflictRetry(_opCtx, [&] {
-                it->Seek(key);
+                if (_forward) {
+                    it->Seek(key);
+                } else {
+                    it->SeekForPrev(key);
+                }
                 return it->status();
             });
         } else {
@@ -1081,12 +1090,10 @@ namespace mongo {
         invariant(it->Valid());
         invariantRocksOK(status);
 
-        auto id = RocksRecordStore::_makeRecordId(it->key(), _keyFormat);
-        auto value = it->value();
-
         _eof = false;
-        _lastLoc = id;
+        _lastLoc = RocksRecordStore::_makeRecordId(it->key(), _keyFormat);
 
+        auto value = it->value();
         return {{_lastLoc, {value.data(), static_cast<int>(value.size())}}};
     }
 
