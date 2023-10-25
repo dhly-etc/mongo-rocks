@@ -89,15 +89,11 @@ namespace mongo {
             NamespaceString nss;
             std::string ident;
             std::string prefix;
-            bool isCapped;
-            int64_t cappedMaxSize;
-            int64_t cappedMaxDocs;
-            bool tracksSizeAdjustments;
-            Params()
-                : isCapped(false),
-                  cappedMaxSize(-1),
-                  cappedMaxDocs(-1),
-                  tracksSizeAdjustments(true) {}
+            bool isCapped = false;
+            int64_t cappedMaxSize = -1;
+            int64_t cappedMaxDocs = -1;
+            KeyFormat keyFormat = KeyFormat::Long;
+            bool tracksSizeAdjustments = true;
         };
         RocksRecordStore(RocksEngine* engine, rocksdb::ColumnFamilyHandle* cf,
                          OperationContext* opCtx, Params params);
@@ -200,8 +196,8 @@ namespace mongo {
         class Cursor : public SeekableRecordCursor {
         public:
             Cursor(OperationContext* opCtx, rocksdb::TOTransactionDB* db,
-                   rocksdb::ColumnFamilyHandle* cf, std::string prefix, bool forward, bool isCapped,
-                   bool isOplog, RecordId startIterator);
+                   rocksdb::ColumnFamilyHandle* cf, std::string prefix, KeyFormat keyFormat,
+                   bool forward, bool isCapped, bool isOplog, RecordId startIterator);
 
             boost::optional<Record> next() final;
             boost::optional<Record> seekExact(const RecordId& id) final;
@@ -226,6 +222,7 @@ namespace mongo {
             rocksdb::TOTransactionDB* _db;     // not owned
             rocksdb::ColumnFamilyHandle* _cf;  // not owned
             std::string _prefix;
+            const KeyFormat _keyFormat;
             bool _forward;
             bool _isCapped;
             bool _isOplog;
@@ -240,10 +237,11 @@ namespace mongo {
             boost::optional<std::int64_t> _oplogVisibleTs = boost::none;
         };
 
-        static RecordId _makeRecordId(const rocksdb::Slice& slice);
+        static RecordId _makeRecordId(const rocksdb::Slice& slice, KeyFormat keyFormat);
 
         static RecordData _getDataFor(rocksdb::ColumnFamilyHandle* cf, const std::string& prefix,
-                                      OperationContext* opCtx, const RecordId& loc);
+                                      OperationContext* opCtx, const RecordId& loc,
+                                      KeyFormat keyFormat);
 
         RecordId _getLargestKey(OperationContext* opCtx, RocksIterator* iter) const;
 
@@ -255,8 +253,9 @@ namespace mongo {
         // mongoRocks has not yet implemented this.
 
         // The use of this function requires that the passed in storage outlives the returned Slice
-        static rocksdb::Slice _makeKey(const RecordId& loc, int64_t* storage);
-        static std::string _makePrefixedKey(const std::string& prefix, const RecordId& loc);
+        static rocksdb::Slice _makeKey(const RecordId& loc, KeyFormat keyFormat, int64_t* storage);
+        static std::string _makePrefixedKey(const std::string& prefix, const RecordId& loc,
+                                            KeyFormat keyFormat);
         Timestamp _prefixedKeyToTimestamp(const std::string& key) const;
         Timestamp _prefixedKeyToTimestamp(const rocksdb::Slice& key) const;
 
@@ -282,6 +281,8 @@ namespace mongo {
 
         mutable stdx::timed_mutex _cappedDeleterMutex;  // see comment in ::cappedDeleteAsNeeded
         int _cappedDeleteCheckCount;                    // see comment in ::cappedDeleteAsNeeded
+
+        const KeyFormat _keyFormat;
 
         const bool _isOplog;
 

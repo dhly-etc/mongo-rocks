@@ -552,6 +552,7 @@ namespace mongo {
             params.isCapped ? (options.cappedSize ? options.cappedSize : 4096) : -1;
         params.cappedMaxDocs =
             params.isCapped ? (options.cappedMaxDocs ? options.cappedMaxDocs : -1) : -1;
+        params.keyFormat = options.clusteredIndex ? KeyFormat::String : KeyFormat::Long;
         params.tracksSizeAdjustments = true;
         if (params.nss.isReplicated()) {
             rocksdb::TOTransaction::enableTimestamp(params.prefix);
@@ -649,6 +650,7 @@ namespace mongo {
         params.isCapped = false;
         params.cappedMaxSize = -1;
         params.cappedMaxDocs = -1;
+        params.keyFormat = keyFormat;
         params.tracksSizeAdjustments = false;
 
         std::unique_ptr<RocksRecordStore> recordStore =

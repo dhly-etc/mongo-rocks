@@ -123,6 +123,7 @@ namespace mongo {
           _cappedMaxSizeSlack(cappedMaxSizeSlackFromSize(params.cappedMaxSize)),
           _cappedMaxDocs(params.cappedMaxDocs),
           _cappedDeleteCheckCount(0),
+          _keyFormat(params.keyFormat),
           _isOplog(params.nss.isOplog()),
           _ident(params.ident),
           _dataSizeKey(std::string("\0\0\0\0", 4) + "datasize-" + params.ident),
@@ -213,10 +214,7 @@ namespace mongo {
         MONGO_UNIMPLEMENTED;  // TODO
     }
 
-    KeyFormat RocksRecordStore::keyFormat() const {
-        // TODO: Handle other formats
-        return KeyFormat::Long;
-    }
+    KeyFormat RocksRecordStore::keyFormat() const { return _keyFormat; }
 
     int64_t RocksRecordStore::storageSize(OperationContext* opCtx, BSONObjBuilder* extraInfo,
                                           int infoLevel) const {
@@ -231,7 +229,7 @@ namespace mongo {
 
     void RocksRecordStore::doDeleteRecord(OperationContext* opCtx, const RecordId& dl) {
         invariant(!_isOplog);
-        std::string key(_makePrefixedKey(_prefix, dl));
+        std::string key(_makePrefixedKey(_prefix, dl, _keyFormat));
 
         RocksRecoveryUnit* ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
         invariant(ru);
@@ -368,13 +366,14 @@ namespace mongo {
             }
             LOGV2(0, "reclaimOplog update _cappedOldestKeyHint",
                   "from"_attr = Timestamp(_cappedOldestKeyHint.getLong()),
-                  "to"_attr = Timestamp(_makeRecordId(iterator->key()).getLong()),
+                  "to"_attr = Timestamp(_makeRecordId(iterator->key(), _keyFormat).getLong()),
                   "maxDelKey"_attr = _prefixedKeyToTimestamp(maxDelKey));
             // TODO(deyukong): we should persist _cappedOldestKeyHint because
             // there is a small chance that DeleteFilesInRange successes but CompactRange fails
             // and then crashes and restarts. In this case, there is a hole at the front of oplogs.
             // Currently, we just log this error.
-            _cappedOldestKeyHint = std::max(_cappedOldestKeyHint, _makeRecordId(iterator->key()));
+            _cappedOldestKeyHint =
+                std::max(_cappedOldestKeyHint, _makeRecordId(iterator->key(), _keyFormat));
 
             invariant(!_cappedOldestKey.empty());
             _counterManager->updateCounter(_cappedOldestKey, _cappedOldestKeyHint.getLong());
@@ -397,8 +396,11 @@ namespace mongo {
 
     Status RocksRecordStore::doInsertRecords(OperationContext* opCtx, std::vector<Record>* records,
                                              const std::vector<Timestamp>& timestamps) {
-        auto insertRecord = [this](OperationContext* opCtx, const char* data, int len,
+        auto insertRecord = [this](OperationContext* opCtx, const Record& record,
                                    Timestamp timestamp) {
+            auto data = record.data.data();
+            auto len = record.data.size();
+
             dassert(opCtx->lockState()->isWriteLocked());
             if (_isCapped && len > _cappedMaxSize) {
                 return StatusWith<RecordId>(ErrorCodes::BadValue,
@@ -418,7 +420,14 @@ namespace mongo {
                 }
                 loc = status.getValue();
             } else {
-                loc = _nextId();
+                switch (_keyFormat) {
+                    case KeyFormat::Long:
+                        loc = _nextId();
+                        break;
+                    case KeyFormat::String:
+                        loc = record.id;
+                        break;
+                }
             }
 
             Timestamp ts;
@@ -432,8 +441,8 @@ namespace mongo {
                 auto s = opCtx->recoveryUnit()->setTimestamp(ts);
                 invariant(s.isOK(), s.reason());
             }
-            invariantRocksOK(ROCKS_OP_CHECK(
-                txn->Put(_cf, _makePrefixedKey(_prefix, loc), rocksdb::Slice(data, len))));
+            invariantRocksOK(ROCKS_OP_CHECK(txn->Put(
+                _cf, _makePrefixedKey(_prefix, loc, _keyFormat), rocksdb::Slice(data, len))));
 
             _changeNumRecords(opCtx, 1);
             _increaseDataSize(opCtx, len);
@@ -443,8 +452,7 @@ namespace mongo {
 
         int index = 0;
         for (auto& record : *records) {
-            StatusWith<RecordId> res =
-                insertRecord(opCtx, record.data.data(), record.data.size(), timestamps[index++]);
+            StatusWith<RecordId> res = insertRecord(opCtx, record, timestamps[index++]);
             if (!res.isOK()) return res.getStatus();
 
             record.id = res.getValue();
@@ -454,7 +462,7 @@ namespace mongo {
 
     Status RocksRecordStore::doUpdateRecord(OperationContext* opCtx, const RecordId& loc,
                                             const char* data, int len) {
-        std::string key(_makePrefixedKey(_prefix, loc));
+        std::string key(_makePrefixedKey(_prefix, loc, _keyFormat));
 
         RocksRecoveryUnit* ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
         invariant(ru);
@@ -502,8 +510,8 @@ namespace mongo {
             ru->setIsOplogReader();
         }
 
-        return std::make_unique<Cursor>(opCtx, _db, _cf, _prefix, forward, _isCapped, _isOplog,
-                                        startIterator);
+        return std::make_unique<Cursor>(opCtx, _db, _cf, _prefix, _keyFormat, forward, _isCapped,
+                                        _isOplog, startIterator);
     }
 
     Status RocksRecordStore::doTruncate(OperationContext* opCtx) {
@@ -521,13 +529,14 @@ namespace mongo {
                      iterator->Next();
                      return iterator->status();
                  })) {
-                deleteRecord(opCtx, _makeRecordId(iterator->key()));
+                deleteRecord(opCtx, _makeRecordId(iterator->key(), _keyFormat));
             }
         } else {
             iterator->SeekToFirst();
             if (iterator->Valid()) {
                 const bool inclusive = true;
-                cappedTruncateAfter(opCtx, _makeRecordId(iterator->key()), inclusive, nullptr);
+                cappedTruncateAfter(opCtx, _makeRecordId(iterator->key(), _keyFormat), inclusive,
+                                    nullptr);
             }
         }
 
@@ -542,8 +551,8 @@ namespace mongo {
 
     Status RocksRecordStore::doCompact(OperationContext* opCtx,
                                        boost::optional<int64_t> freeSpaceTargetMB) {
-        std::string beginString(_makePrefixedKey(_prefix, RecordId()));
-        std::string endString(_makePrefixedKey(_prefix, RecordId::maxLong()));
+        std::string beginString(_makePrefixedKey(_prefix, RecordId(), _keyFormat));
+        std::string endString(_makePrefixedKey(_prefix, RecordId::maxLong(), _keyFormat));
         rocksdb::Slice beginRange(beginString);
         rocksdb::Slice endRange(endString);
         // TODO(wolfkdy): support it
@@ -610,7 +619,7 @@ namespace mongo {
         });
         dassert(iter->Valid());
         rocksdb::Slice lastSlice = iter->key();
-        return _makeRecordId(lastSlice);
+        return _makeRecordId(lastSlice, _keyFormat);
     }
 
     void RocksRecordStore::reserveRecordIds(OperationContext* opCtx, std::vector<RecordId>* out,
@@ -736,8 +745,8 @@ namespace mongo {
                 };
                 while (true) {
                     auto s = _compactionScheduler->compactOplog(
-                        _cf, _makePrefixedKey(_prefix, firstRemovedId),
-                        _makePrefixedKey(_prefix, lastRemovedId));
+                        _cf, _makePrefixedKey(_prefix, firstRemovedId, _keyFormat),
+                        _makePrefixedKey(_prefix, lastRemovedId, _keyFormat));
                     invariant(s.isOK());
                     invariant(retryCnt++ < 10);
                     if (checkRemovedOK()) {
@@ -777,14 +786,31 @@ namespace mongo {
         return RecordId(_nextIdNum.fetchAndAdd(1));
     }
 
-    rocksdb::Slice RocksRecordStore::_makeKey(const RecordId& loc, int64_t* storage) {
-        *storage = endian::nativeToBig(loc.getLong());
-        return rocksdb::Slice(reinterpret_cast<const char*>(storage), sizeof(*storage));
+    rocksdb::Slice RocksRecordStore::_makeKey(const RecordId& loc, KeyFormat keyFormat,
+                                              int64_t* storage) {
+        const char* data;
+        size_t size;
+
+        switch (keyFormat) {
+            case KeyFormat::Long:
+                *storage = endian::nativeToBig(loc.getLong());
+                data = reinterpret_cast<const char*>(storage);
+                size = sizeof(*storage);
+                break;
+            case KeyFormat::String:
+                auto str = loc.getStr();
+                data = str.rawData();
+                size = str.size();
+                break;
+        }
+
+        return rocksdb::Slice(data, size);
     }
 
-    std::string RocksRecordStore::_makePrefixedKey(const std::string& prefix, const RecordId& loc) {
+    std::string RocksRecordStore::_makePrefixedKey(const std::string& prefix, const RecordId& loc,
+                                                   KeyFormat keyFormat) {
         int64_t storage;
-        auto encodedLoc = _makeKey(loc, &storage);
+        auto encodedLoc = _makeKey(loc, keyFormat, &storage);
         std::string key(prefix);
         key.append(encodedLoc.data(), encodedLoc.size());
         return key;
@@ -793,23 +819,29 @@ namespace mongo {
     Timestamp RocksRecordStore::_prefixedKeyToTimestamp(const rocksdb::Slice& key) const {
         rocksdb::Slice slice(key);
         slice.remove_prefix(_prefix.size());
-        return Timestamp(_makeRecordId(slice).getLong());
+        return Timestamp(_makeRecordId(slice, _keyFormat).getLong());
     }
 
     Timestamp RocksRecordStore::_prefixedKeyToTimestamp(const std::string& key) const {
         return _prefixedKeyToTimestamp(rocksdb::Slice(key));
     }
 
-    RecordId RocksRecordStore::_makeRecordId(const rocksdb::Slice& slice) {
-        invariant(slice.size() == sizeof(int64_t));
-        int64_t repr = endian::bigToNative(*reinterpret_cast<const int64_t*>(slice.data()));
-        RecordId a(repr);
-        return RecordId(repr);
+    RecordId RocksRecordStore::_makeRecordId(const rocksdb::Slice& slice, KeyFormat keyFormat) {
+        switch (keyFormat) {
+            case KeyFormat::Long:
+                invariant(slice.size() == sizeof(int64_t));
+                return RecordId{
+                    endian::bigToNative(*reinterpret_cast<const int64_t*>(slice.data()))};
+            case KeyFormat::String:
+                return RecordId{slice.data(), static_cast<int32_t>(slice.size())};
+        }
+
+        MONGO_UNREACHABLE;
     }
 
     bool RocksRecordStore::findRecord(OperationContext* opCtx, const RecordId& loc,
                                       RecordData* out) const {
-        RecordData rd = _getDataFor(_cf, _prefix, opCtx, loc);
+        RecordData rd = _getDataFor(_cf, _prefix, opCtx, loc, _keyFormat);
         if (rd.data() == NULL) return false;
         *out = rd;
         return true;
@@ -817,11 +849,11 @@ namespace mongo {
 
     RecordData RocksRecordStore::_getDataFor(rocksdb::ColumnFamilyHandle* cf,
                                              const std::string& prefix, OperationContext* opCtx,
-                                             const RecordId& loc) {
+                                             const RecordId& loc, KeyFormat keyFormat) {
         RocksRecoveryUnit* ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
 
         std::string valueStorage;
-        auto key = _makePrefixedKey(prefix, loc);
+        auto key = _makePrefixedKey(prefix, loc, keyFormat);
         auto status =
             rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(cf, key, &valueStorage); });
         if (status.IsNotFound()) {
@@ -862,12 +894,13 @@ namespace mongo {
 
     RocksRecordStore::Cursor::Cursor(OperationContext* opCtx, rocksdb::TOTransactionDB* db,
                                      rocksdb::ColumnFamilyHandle* cf, std::string prefix,
-                                     bool forward, bool isCapped, bool isOplog,
+                                     KeyFormat keyFormat, bool forward, bool isCapped, bool isOplog,
                                      RecordId startIterator)
         : _opCtx(opCtx),
           _db(db),
           _cf(cf),
           _prefix(std::move(prefix)),
+          _keyFormat(keyFormat),
           _forward(forward),
           _isCapped(isCapped),
           _isOplog(isOplog) {
@@ -889,7 +922,7 @@ namespace mongo {
     void RocksRecordStore::Cursor::positionIterator() {
         _skipNextAdvance = false;
         int64_t locStorage;
-        auto seekTarget = RocksRecordStore::_makeKey(_lastLoc, &locStorage);
+        auto seekTarget = RocksRecordStore::_makeKey(_lastLoc, _keyFormat, &locStorage);
         if (!_iterator->Valid() || _iterator->key() != seekTarget) {
             rocksPrepareConflictRetry(_opCtx, [&] {
                 _iterator->Seek(seekTarget);
@@ -903,7 +936,8 @@ namespace mongo {
         if (_forward) {
             // If _skipNextAdvance is true we landed after where we were. Return our new location on
             // the next call to next().
-            _skipNextAdvance = !_iterator->Valid() || _lastLoc != _makeRecordId(_iterator->key());
+            _skipNextAdvance =
+                !_iterator->Valid() || _lastLoc != _makeRecordId(_iterator->key(), _keyFormat);
         } else {
             // Seek() lands on or after the key, while reverse cursors need to land on or before.
             if (!_iterator->Valid()) {
@@ -915,7 +949,7 @@ namespace mongo {
                 invariantRocksOK(_iterator->status());
                 _skipNextAdvance = true;
             } else {
-                if (_lastLoc != _makeRecordId(_iterator->key())) {
+                if (_lastLoc != _makeRecordId(_iterator->key(), _keyFormat)) {
                     // Landed after. This is true: iterator->key() > _lastLoc
                     // Since iterator is valid and Seek() landed after key,
                     // iterator will still be valid after we call Prev().
@@ -929,7 +963,8 @@ namespace mongo {
         }
         // _lastLoc != _makeRecordId(_iterator->key()) indicates that the record _lastLoc was
         // deleted. In this case, mark _eof only if the collection is capped.
-        _eof = !_iterator->Valid() || (_isCapped && _lastLoc != _makeRecordId(_iterator->key()));
+        _eof = !_iterator->Valid() ||
+               (_isCapped && _lastLoc != _makeRecordId(_iterator->key(), _keyFormat));
     }
 
     rocksdb::Iterator* RocksRecordStore::Cursor::iterator() {
@@ -994,7 +1029,7 @@ namespace mongo {
         _skipNextAdvance = false;
         _iterator.reset();
 
-        auto key = _makePrefixedKey(_prefix, id);
+        auto key = _makePrefixedKey(_prefix, id, _keyFormat);
         auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx);
         auto status =
             rocksPrepareConflictRetry(_opCtx, [&] { return ru->Get(_cf, key, &_seekExactResult); });
@@ -1087,12 +1122,13 @@ namespace mongo {
             _eof = true;
             return {};
         }
-        if (_oplogVisibleTs && _makeRecordId(_iterator->key()).getLong() > *_oplogVisibleTs) {
+        if (_oplogVisibleTs &&
+            _makeRecordId(_iterator->key(), _keyFormat).getLong() > *_oplogVisibleTs) {
             _eof = true;
             return {};
         }
         _eof = false;
-        _lastLoc = _makeRecordId(_iterator->key());
+        _lastLoc = _makeRecordId(_iterator->key(), _keyFormat);
 
         auto dataSlice = _iterator->value();
         return {{_lastLoc, {dataSlice.data(), static_cast<int>(dataSlice.size())}}};
