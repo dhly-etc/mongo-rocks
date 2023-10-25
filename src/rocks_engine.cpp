@@ -52,6 +52,7 @@
 #include "mongo/db/catalog/collection_options.h"
 #include "mongo/db/client.h"
 #include "mongo/db/concurrency/locker.h"
+#include "mongo/db/db_raii.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/modules/rocks/src/rocks_parameters_gen.h"
@@ -68,6 +69,7 @@
 #include "mongo/util/concurrency/idle_thread_block.h"
 #include "mongo/util/concurrency/semaphore_ticketholder.h"
 #include "mongo/util/debug_util.h"
+#include "mongo/util/exit.h"
 #include "mongo/util/fail_point.h"
 #include "mongo/util/processinfo.h"
 #include "mongo_rate_limiter_checker.h"
@@ -131,6 +133,8 @@ namespace mongo {
     };
 
     namespace {
+        std::set<NamespaceString> _backgroundThreadNamespaces;
+        Mutex _backgroundThreadMutex;
         rocksdb::TOComparator comparator;
         rocksdb::TOComparator comparatorFake(0);
         bool isNsEnableTimestamp(const StringData& ns) {
@@ -145,6 +149,82 @@ namespace mongo {
             }
             return true;
         }
+
+        class RocksRecordStoreThread : public BackgroundJob {
+        public:
+            RocksRecordStoreThread(const NamespaceString& ns)
+                : BackgroundJob(true /* deleteSelf */), _ns(ns) {
+                _name = std::string("RocksRecordStoreThread-for-") + _ns.toStringForResourceId();
+            }
+
+            virtual std::string name() const { return _name; }
+
+            /**
+             * @return if any oplog records are deleted.
+             */
+            bool _deleteExcessDocuments() {
+                if (!getGlobalServiceContext()->getStorageEngine()) {
+                    LOGV2_DEBUG(0, 1, "no global storage engine yet");
+                    return false;
+                }
+                const auto opCtx = cc().makeOperationContext();
+
+                try {
+                    // A Global IX lock should be good enough to protect the oplog truncation from
+                    // interruptions such as restartCatalog. Database lock or collection lock is not
+                    // needed. This improves concurrency if oplog truncation takes long time.
+                    Lock::GlobalLock lk(opCtx.get(), MODE_IX);
+
+                    RocksRecordStore* rs = nullptr;
+                    {
+                        // Release the database lock right away because we don't want to
+                        // block other operations on the local database and given the
+                        // fact that oplog collection is so special, Global IX lock can
+                        // make sure the collection exists.
+                        AutoGetOplog oplog{opCtx.get(), OplogAccessMode::kWrite};
+                        if (!oplog.getCollection()) {
+                            LOGV2_DEBUG(0, 2, "no collection", logAttrs(_ns));
+                            return false;
+                        }
+                        rs = checked_cast<RocksRecordStore*>(
+                            oplog.getCollection()->getRecordStore());
+                    }
+                    rs->reclaimOplog(opCtx.get());
+                    return true;
+                } catch (const ExceptionForCat<ErrorCategory::Interruption>&) {
+                    return false;
+                } catch (const std::exception& e) {
+                    LOGV2_FATAL_NOTRACE(0, "error in RocksRecordStoreThread",
+                                        "error"_attr = redact(e.what()));
+                } catch (...) {
+                    LOGV2_FATAL_NOTRACE(0, "unknown error in RocksRecordStoreThread");
+                }
+                MONGO_UNREACHABLE
+            }
+
+            virtual void run() {
+                ThreadClient tc(_name, getGlobalServiceContext()->getService());
+
+                while (!globalInShutdownDeprecated()) {
+                    bool removed = _deleteExcessDocuments();
+                    LOGV2_DEBUG(0, 2, "RocksRecordStoreThread deleted", "removed"_attr = removed);
+                    if (!removed) {
+                        // If we removed 0 documents, sleep a bit in case we're on a laptop
+                        // or something to be nice.
+                        sleepmillis(1000);
+                    } else {
+                        // wake up every 100ms
+                        sleepmillis(100);
+                    }
+                }
+
+                LOGV2(0, "shutting down");
+            }
+
+        private:
+            NamespaceString _ns;
+            std::string _name;
+        };
     }  // namespace
 
     // first four bytes are the default prefix 0
@@ -674,6 +754,32 @@ namespace mongo {
 
     void RocksEngine::setJournalListener(JournalListener* jl) {
         _durabilityManager->setJournalListener(jl);
+    }
+
+    bool RocksEngine::initRsOplogBackgroundThread(const NamespaceString& nss) {
+        if (!nss.isOplog()) {
+            return false;
+        }
+
+        // TODO readOnly?
+        if (storageGlobalParams.repair) {
+            LOGV2_DEBUG(0, 1,
+                        "not starting RocksRecordStoreThread for because we are either in repair "
+                        "or read-only mode",
+                        "nss"_attr = nss);
+            return false;
+        }
+
+        stdx::lock_guard<Latch> lock(_backgroundThreadMutex);
+        if (_backgroundThreadNamespaces.count(nss)) {
+            LOGV2(0, "RocksRecordStoreThread already started", logAttrs(nss));
+        } else {
+            LOGV2(0, "Starting RocksRecordStoreThread", logAttrs(nss));
+            BackgroundJob* backgroundThread = new RocksRecordStoreThread(nss);
+            backgroundThread->go();
+            _backgroundThreadNamespaces.insert(nss);
+        }
+        return true;
     }
 
     void RocksEngine::setOldestTimestampFromStable() {

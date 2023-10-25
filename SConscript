@@ -78,7 +78,6 @@ env.Library(
     source=[
         'src/rocks_init.cpp',
         'src/rocks_options_init.cpp',
-        'src/rocks_record_store_mongod.cpp',
         'src/rocks_server_status.cpp',
     ],
     LIBDEPS_PRIVATE=[
