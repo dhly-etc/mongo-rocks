@@ -1047,7 +1047,47 @@ namespace mongo {
     }
 
     boost::optional<Record> RocksRecordStore::Cursor::seekNear(const RecordId& start) {
-        MONGO_UNIMPLEMENTED;  // TODO
+        if (_oplogVisibleTs && start.getLong() > *_oplogVisibleTs) {
+            _eof = true;
+            return {};
+        }
+        _needFirstSeek = false;
+        _skipNextAdvance = false;
+        _iterator.reset();
+
+        auto key = _makePrefixedKey(_prefix, start, _keyFormat);
+        auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx);
+        auto it = ru->NewIterator(_cf, _prefix);
+
+        auto status = rocksPrepareConflictRetry(_opCtx, [&] {
+            it->SeekForPrev(key);
+            return it->status();
+        });
+
+        if (!it->Valid()) {
+            status = rocksPrepareConflictRetry(_opCtx, [&] {
+                it->Seek(key);
+                return it->status();
+            });
+        } else {
+            invariantRocksOK(status);
+        }
+
+        if (!it->Valid()) {
+            _eof = true;
+            return {};
+        }
+
+        invariant(it->Valid());
+        invariantRocksOK(status);
+
+        auto id = RocksRecordStore::_makeRecordId(it->key(), _keyFormat);
+        auto value = it->value();
+
+        _eof = false;
+        _lastLoc = id;
+
+        return {{_lastLoc, {value.data(), static_cast<int>(value.size())}}};
     }
 
     boost::optional<Record> RocksRecordStore::Cursor::seekToLast() {
