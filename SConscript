@@ -86,18 +86,12 @@ env.Library(
     PROGDEPS_DEPENDENTS=['$BUILD_DIR/mongo/db/mongod'],
 )
 
-env.Library(target='storage_rocks_mock', source=[
-    'src/rocks_record_store_mock.cpp',
-], LIBDEPS=[
-    'storage_rocks_base',
-])
-
 env.CppUnitTest(
     target='storage_rocks_index_test', source=['src/rocks_index_test.cpp'], LIBDEPS=[
         '$BUILD_DIR/mongo/db/service_context_test_fixture',
         '$BUILD_DIR/mongo/db/storage/sorted_data_interface_test_harness',
         '$BUILD_DIR/mongo/db/storage/sorted_data_interface_tests',
-        'storage_rocks_mock',
+        'storage_rocks_base',
     ])
 
 env.CppUnitTest(
@@ -109,7 +103,7 @@ env.CppUnitTest(
         '$BUILD_DIR/mongo/db/service_context_test_fixture',
         '$BUILD_DIR/mongo/db/storage/record_store_test_harness',
         '$BUILD_DIR/mongo/util/clock_source_mock',
-        'storage_rocks_mock',
+        'storage_rocks_base',
     ])
 
 env.CppUnitTest(
@@ -125,7 +119,7 @@ env.CppUnitTest(
         '$BUILD_DIR/mongo/db/service_context_test_fixture',
         '$BUILD_DIR/mongo/db/storage/recovery_unit_test_harness',
         '$BUILD_DIR/mongo/util/clock_source_mock',
-        'storage_rocks_mock',
+        'storage_rocks_base',
     ],
 )
 
@@ -135,6 +129,6 @@ env.CppUnitTest(
         'src/totdb/totransaction_test.cpp',
     ],
     LIBDEPS=[
-        'storage_rocks_mock',
+        'storage_rocks_base',
     ],
 )
