@@ -295,11 +295,7 @@ namespace mongo {
         RecordId _cappedOldestKeyHint;
 
         std::string _ident;
-
-        // Protects initialization of the _nextIdNum.
-        mutable Mutex _initNextIdMutex = MONGO_MAKE_LATCH("RocksRecordStore::_initNextIdMutex");
         AtomicWord<long long> _nextIdNum{0};
-
         std::atomic<long long> _dataSize;
         std::atomic<long long> _numRecords;
 
