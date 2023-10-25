@@ -98,8 +98,7 @@ namespace mongo {
     /// RocksIndexBase
 
     IndexValidateResults RocksIndexBase::validate(OperationContext* opCtx, bool full) const {
-        // TODO
-        return IndexValidateResults{};
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     Status RocksIndexBase::initAsEmpty(OperationContext* opCtx) {
@@ -396,7 +395,7 @@ namespace mongo {
             }
 
             void setSaveStorageCursorOnDetachFromOperationContext(bool) final {
-                // TODO
+                MONGO_UNIMPLEMENTED;  // TODO
             }
 
         protected:
@@ -678,13 +677,12 @@ namespace mongo {
     }
 
     long long RocksIndexBase::getFreeStorageBytes(OperationContext* opCtx) const {
-        // TODO
-        return 0;
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     void RocksIndexBase::printIndexEntryMetadata(OperationContext* opCtx,
                                                  const key_string::Value& keyString) const {
-        // TODO
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     int64_t RocksIndexBase::numEntries(OperationContext* opCtx) const {
@@ -1006,8 +1004,7 @@ namespace mongo {
 
     boost::optional<RecordId> RocksUniqueIndex::findLoc(OperationContext* opCtx,
                                                         const key_string::Value& keyString) const {
-        // TODO
-        return {};
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     Status RocksUniqueIndex::dupKeyCheck(OperationContext* opCtx,
@@ -1054,7 +1051,7 @@ namespace mongo {
     void RocksUniqueIndex::insertWithRecordIdInValue_forTest(OperationContext* opCtx,
                                                              const key_string::Value& keyString,
                                                              RecordId rid) {
-        // TODO
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     /// RocksStandardIndex
@@ -1110,8 +1107,7 @@ namespace mongo {
 
     boost::optional<RecordId> RocksStandardIndex::findLoc(
         OperationContext* opCtx, const key_string::Value& keyString) const {
-        // TODO
-        return {};
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     std::unique_ptr<SortedDataInterface::Cursor> RocksStandardIndex::newCursor(
@@ -1129,7 +1125,7 @@ namespace mongo {
     void RocksStandardIndex::insertWithRecordIdInValue_forTest(OperationContext* opCtx,
                                                                const key_string::Value& keyString,
                                                                RecordId rid) {
-        // TODO
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
 }  // namespace mongo

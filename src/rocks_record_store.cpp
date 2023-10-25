@@ -217,8 +217,7 @@ namespace mongo {
     }
 
     NamespaceString RocksRecordStore::ns(OperationContext* opCtx) const {
-        // TODO
-        return {};
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     KeyFormat RocksRecordStore::keyFormat() const {
@@ -493,7 +492,7 @@ namespace mongo {
 
     void RocksRecordStore::printRecordMetadata(OperationContext* opCtx, const RecordId& recordId,
                                                std::set<Timestamp>* recordTimestamps) const {
-        // TODO
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     std::unique_ptr<SeekableRecordCursor> RocksRecordStore::getCursor(OperationContext* opCtx,
@@ -545,8 +544,7 @@ namespace mongo {
     Status RocksRecordStore::doRangeTruncate(OperationContext* opCtx, const RecordId& minRecordId,
                                              const RecordId& maxRecordId, int64_t hintDataSizeDiff,
                                              int64_t hintNumRecordsDiff) {
-        // TODO
-        return Status::OK();
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     Status RocksRecordStore::doCompact(OperationContext* opCtx,
@@ -603,13 +601,12 @@ namespace mongo {
     }
 
     RecordId RocksRecordStore::getLargestKey(OperationContext* opCtx) const {
-        // TODO
-        return RecordId{};
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     void RocksRecordStore::reserveRecordIds(OperationContext* opCtx, std::vector<RecordId>* out,
                                             size_t nRecords) {
-        // TODO
+        MONGO_UNIMPLEMENTED;  // TODO
     }
 
     void RocksRecordStore::updateStatsAfterRepair(OperationContext* opCtx, long long numRecords,
