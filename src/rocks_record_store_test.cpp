@@ -90,8 +90,8 @@ namespace mongo {
             params.ident = "1";
             params.prefix = "prefix";
             params.isCapped = options.capped;
-            params.cappedMaxSize = options.cappedSize;
-            params.cappedMaxDocs = options.cappedMaxDocs;
+            params.cappedMaxSize = options.cappedSize ? options.cappedSize : -1;
+            params.cappedMaxDocs = options.cappedMaxDocs ? options.cappedMaxDocs : -1;
 
             return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns),
                                                       opCtx.get(), params);
