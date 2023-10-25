@@ -79,6 +79,7 @@ namespace mongo {
     class RocksRecordStore;
     class RocksOplogManager;
     class RocksEngine;
+    class RocksIterator;
 
     typedef std::list<RecordId> SortedRecordIds;
 
@@ -244,7 +245,10 @@ namespace mongo {
         static RecordData _getDataFor(rocksdb::ColumnFamilyHandle* cf, const std::string& prefix,
                                       OperationContext* opCtx, const RecordId& loc);
 
+        RecordId _getLargestKey(OperationContext* opCtx, RocksIterator* iter) const;
+
         RecordId _nextId();
+
         bool cappedAndNeedDelete(long long dataSizeDelta, long long numRecordsDelta) const;
 
         // NOTE(wolfkdy): mongo4.2 uses _initNextIdIfNeeded to lazy init. accurate db bootstrap.
@@ -259,7 +263,6 @@ namespace mongo {
         void _changeNumRecords(OperationContext* opCtx, int64_t amount);
         void _increaseDataSize(OperationContext* opCtx, int64_t amount);
 
-    private:
         void _loadCountFromCountManager(OperationContext* opCtx);
 
         RocksEngine* _engine;                            // not owned
@@ -292,7 +295,11 @@ namespace mongo {
         RecordId _cappedOldestKeyHint;
 
         std::string _ident;
-        AtomicWord<unsigned long long> _nextIdNum{0};
+
+        // Protects initialization of the _nextIdNum.
+        mutable Mutex _initNextIdMutex = MONGO_MAKE_LATCH("RocksRecordStore::_initNextIdMutex");
+        AtomicWord<long long> _nextIdNum{0};
+
         std::atomic<long long> _dataSize;
         std::atomic<long long> _numRecords;
 

@@ -155,14 +155,7 @@ namespace mongo {
         bool emptyCollection = !iter->Valid();
         if (!emptyCollection) {
             // if it's not empty, find next RecordId
-            rocksPrepareConflictRetry(opCtx, [&] {
-                iter->SeekToLast();
-                return iter->status();
-            });
-            dassert(iter->Valid());
-            rocksdb::Slice lastSlice = iter->key();
-            RecordId lastId = _makeRecordId(lastSlice);
-            _nextIdNum.store(lastId.getLong() + 1);
+            _nextIdNum.store(_getLargestKey(opCtx, iter.get()).getLong() + 1);
         } else {
             // Need to start at 1 so we are always higher than RecordId::min()
             _nextIdNum.store(1);
@@ -601,12 +594,31 @@ namespace mongo {
     }
 
     RecordId RocksRecordStore::getLargestKey(OperationContext* opCtx) const {
-        MONGO_UNIMPLEMENTED;  // TODO
+        auto txn = std::unique_ptr<rocksdb::TOTransaction>(
+            _db->BeginTransaction(rocksdb::WriteOptions(), rocksdb::TOTransactionOptions()));
+        invariant(txn);
+        std::unique_ptr<RocksIterator> iter(
+            RocksRecoveryUnit::NewIteratorWithTxn(txn.get(), _cf, _prefix));
+        iter->SeekPrefix("");
+        return iter->Valid() ? _getLargestKey(opCtx, iter.get()) : RecordId{};
+    }
+
+    RecordId RocksRecordStore::_getLargestKey(OperationContext* opCtx, RocksIterator* iter) const {
+        rocksPrepareConflictRetry(opCtx, [&] {
+            iter->SeekToLast();
+            return iter->status();
+        });
+        dassert(iter->Valid());
+        rocksdb::Slice lastSlice = iter->key();
+        return _makeRecordId(lastSlice);
     }
 
     void RocksRecordStore::reserveRecordIds(OperationContext* opCtx, std::vector<RecordId>* out,
                                             size_t nRecords) {
-        MONGO_UNIMPLEMENTED;  // TODO
+        auto id = _nextIdNum.fetchAndAdd(nRecords);
+        for (size_t i = 0; i < nRecords; ++i) {
+            out->push_back(RecordId{id++});
+        }
     }
 
     void RocksRecordStore::updateStatsAfterRepair(OperationContext* opCtx, long long numRecords,
