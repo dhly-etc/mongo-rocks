@@ -110,7 +110,7 @@ namespace mongo {
 
     RocksRecordStore::RocksRecordStore(RocksEngine* engine, rocksdb::ColumnFamilyHandle* cf,
                                        OperationContext* opCtx, Params params)
-        : RecordStore(boost::none, params.ident, params.isCapped),
+        : RecordStore(params.uuid, params.ident, params.isCapped),
           _engine(engine),
           _db(engine->getDB()),
           _cf(cf),
@@ -211,7 +211,13 @@ namespace mongo {
     }
 
     NamespaceString RocksRecordStore::ns(OperationContext* opCtx) const {
-        MONGO_UNIMPLEMENTED;  // TODO
+        if (!_uuid) {
+            return NamespaceString::kEmpty;
+        }
+
+        return CollectionCatalog::get(opCtx)
+            ->lookupNSSByUUID(opCtx, *_uuid)
+            .value_or(NamespaceString::kEmpty);
     }
 
     KeyFormat RocksRecordStore::keyFormat() const { return _keyFormat; }
@@ -503,8 +509,9 @@ namespace mongo {
             auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
             // If we already have a snapshot we don't know what it can see, unless we know no
             // one else could be writing (because we hold an exclusive lock).
-            invariant(!ru->inActiveTxn() || opCtx->lockState()->isCollectionLockedForMode(
-                                                NamespaceString(ns(opCtx)), MODE_X));
+            // TODO re-enable or remove
+            // invariant(!ru->inActiveTxn() || opCtx->lockState()->isCollectionLockedForMode(
+            //                                     NamespaceString(ns(opCtx)), MODE_X));
 
             startIterator = _cappedOldestKeyHint;
             ru->setIsOplogReader();

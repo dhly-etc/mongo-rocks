@@ -87,6 +87,7 @@ namespace mongo {
     public:
         struct Params {
             NamespaceString nss;
+            boost::optional<UUID> uuid;
             std::string ident;
             std::string prefix;
             bool isCapped = false;

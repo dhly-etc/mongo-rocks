@@ -87,6 +87,7 @@ namespace mongo {
 
             RocksRecordStore::Params params;
             params.nss = NamespaceString::createNamespaceString_forTest(ns);
+            params.uuid = options.uuid;
             params.ident = "1";
             params.prefix = "prefix";
             params.isCapped = options.capped;

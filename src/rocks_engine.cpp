@@ -545,6 +545,7 @@ namespace mongo {
 
         RocksRecordStore::Params params;
         params.nss = nss;
+        params.uuid = options.uuid;
         params.ident = ident.toString();
         params.prefix = prefix;
         params.isCapped = options.capped;
