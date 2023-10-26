@@ -85,6 +85,9 @@ namespace mongo {
 
         std::unique_ptr<RecordStore> createRecordStore(OperationContext* opCtx,
                                                        const std::string& ns) final {
+            // The unit tests expect the recovery unit to be active after creating the record store.
+            checked_cast<RocksRecoveryUnit*>(opCtx->recoveryUnit())->getTransaction();
+
             RocksRecordStore::Params params;
             params.nss = NamespaceString::createNamespaceString_forTest(ns);
             return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), opCtx,
@@ -430,7 +433,7 @@ namespace mongo {
     TEST_F(RocksRecoveryUnitTestFixture, CommitUnitOfWork) {
         auto opCtx = clientAndCtx.second.get();
         const auto rs = harnessHelper->createRecordStore(opCtx, "table1");
-        ru->beginUnitOfWork(opCtx);
+        ru->beginUnitOfWork(opCtx->readOnly());
         StatusWith<RecordId> s = rs->insertRecord(opCtx, "data", 4, Timestamp());
         ASSERT_TRUE(s.isOK());
         ASSERT_EQUALS(1, rs->numRecords(opCtx));
@@ -442,7 +445,7 @@ namespace mongo {
     TEST_F(RocksRecoveryUnitTestFixture, AbortUnitOfWork) {
         auto opCtx = clientAndCtx.second.get();
         const auto rs = harnessHelper->createRecordStore(opCtx, "table1");
-        ru->beginUnitOfWork(opCtx);
+        ru->beginUnitOfWork(opCtx->readOnly());
         StatusWith<RecordId> s = rs->insertRecord(opCtx, "data", 4, Timestamp());
         ASSERT_TRUE(s.isOK());
         ASSERT_EQUALS(1, rs->numRecords(opCtx));
@@ -467,13 +470,13 @@ namespace mongo {
 
     DEATH_TEST_F(RocksRecoveryUnitTestFixture, WaitUntilDurableMustBeOutOfUnitOfWork, "invariant") {
         auto opCtx = clientAndCtx.second.get();
-        opCtx->recoveryUnit()->beginUnitOfWork(opCtx);
+        opCtx->recoveryUnit()->beginUnitOfWork(opCtx->readOnly());
         opCtx->recoveryUnit()->waitUntilDurable(opCtx);
     }
 
     DEATH_TEST_F(RocksRecoveryUnitTestFixture, AbandonSnapshotMustBeOutOfUnitOfWork, "invariant") {
         auto opCtx = clientAndCtx.second.get();
-        opCtx->recoveryUnit()->beginUnitOfWork(opCtx);
+        opCtx->recoveryUnit()->beginUnitOfWork(opCtx->readOnly());
         opCtx->recoveryUnit()->abandonSnapshot();
     }
 
