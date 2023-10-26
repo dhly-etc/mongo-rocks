@@ -877,8 +877,11 @@ namespace mongo {
             auto encodedKey = key_string::Builder{_keyStringVersion, key, _ordering}.getValueCopy();
             const std::string prefixedKey(RocksIndexBase::_makePrefixedKey(_prefix, encodedKey));
             invariantRocksOK(ru->getTransaction()->GetForUpdate(_cf, prefixedKey));
-            if (_keyExists(opCtx, encodedKey)) {
-                return buildDupKeyErrorStatus(key, _ns, _indexName, _keyPattern, {});
+            if (auto it = _keyExists(opCtx, encodedKey)) {
+                auto itKey = it->key();
+                return decodeRecordIdAtEnd(itKey.data(), itKey.size(), _rsKeyFormat) != loc
+                           ? buildDupKeyErrorStatus(key, _ns, _indexName, _keyPattern, {})
+                           : Status::OK();
             }
         }
         auto tableKey = key_string::Builder{_keyStringVersion, key, _ordering, loc}.getValueCopy();
