@@ -493,8 +493,15 @@ namespace mongo {
                 }
 
                 auto found = iter->key();
-                int cmp = std::memcmp(found.data(), keySlice.data(),
+                int cmp = 0;
+                if (found.data() && keySlice.data()) {
+                    cmp = std::memcmp(found.data(), keySlice.data(),
                                       std::min(found.size(), keySlice.size()));
+                } else if (keySlice.data()) {
+                    cmp = -1;
+                } else if (found.data()) {
+                    cmp = 1;
+                }
 
                 // Make sure we land on a matching key (after/before for forward/reverse).
                 // If this operation is ignoring prepared updates and search_near() lands on a key
@@ -899,7 +906,7 @@ namespace mongo {
 
     Status RocksUniqueIndex::_insertIntoIdIndex(OperationContext* opCtx, const BSONObj& key,
                                                 const RecordId& loc, bool dupsAllowed) {
-        dassert(opCtx->lockState()->isWriteLocked());
+        invariant(opCtx->lockState()->inAWriteUnitOfWork());
         invariant(loc.isValid());
         dassert(!hasFieldNames(key));
         invariant(!dupsAllowed);
@@ -1115,7 +1122,7 @@ namespace mongo {
     Status RocksStandardIndex::insert(OperationContext* opCtx, const key_string::Value& keyString,
                                       bool dupsAllowed,
                                       IncludeDuplicateRecordId includeDuplicateRecordId) {
-        dassert(opCtx->lockState()->isWriteLocked());
+        invariant(opCtx->lockState()->inAWriteUnitOfWork());
 
         if (!dupsAllowed) {
             auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);

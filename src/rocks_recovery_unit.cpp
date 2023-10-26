@@ -146,8 +146,11 @@ namespace mongo {
             virtual void Seek(const rocksdb::Slice& target) {
                 startOp();
                 std::unique_ptr<char[]> buffer(new char[_prefix.size() + target.size()]);
+                invariant(_prefix.data());
                 memcpy(buffer.get(), _prefix.data(), _prefix.size());
-                memcpy(buffer.get() + _prefix.size(), target.data(), target.size());
+                if (target.data()) {
+                    memcpy(buffer.get() + _prefix.size(), target.data(), target.size());
+                }
                 auto key = rocksdb::Slice(buffer.get(), _prefix.size() + target.size());
                 _baseIterator->Seek(rocksdb::Slice(buffer.get(), _prefix.size() + target.size()));
                 endOp();
