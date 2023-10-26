@@ -62,6 +62,19 @@
 #include "rocks_snapshot_manager.h"
 
 namespace mongo {
+    namespace {
+
+        std::pair<ServiceContext::UniqueClient, ServiceContext::UniqueOperationContext>
+        makeClientAndOpCtx(RecordStoreHarnessHelper* harnessHelper, const std::string& clientName) {
+            auto sc = harnessHelper->serviceContext();
+            auto client = sc->getService()->makeClient(clientName);
+            auto opCtx = client->makeOperationContext();
+            opCtx->setRecoveryUnit(harnessHelper->newRecoveryUnit(),
+                                   WriteUnitOfWork::RecoveryUnitState::kNotInUnitOfWork);
+            return {std::move(client), std::move(opCtx)};
+        }
+
+    }  // namespace
 
     class RocksHarnessHelper final : public RecordStoreHarnessHelper {
     public:
@@ -86,10 +99,10 @@ namespace mongo {
             auto opCtx = newOperationContext();
 
             if (options.clusteredIndex) {
-                uassert(
-                    6144102,
-                    "RecordStore with CollectionOptions.clusteredIndex requires KeyFormat::String",
-                    keyFormat == KeyFormat::String);
+                uassert(6144102,
+                        "RecordStore with CollectionOptions.clusteredIndex requires "
+                        "KeyFormat::String",
+                        keyFormat == KeyFormat::String);
             }
 
             RocksRecordStore::Params params;
@@ -152,7 +165,7 @@ namespace mongo {
         int N = 12;
 
         {
-            ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
+            auto [client, opCtx] = makeClientAndOpCtx(harnessHelper.get(), "insert");
             {
                 WriteUnitOfWork uow(opCtx.get());
                 for (int i = 0; i < N; i++) {
@@ -164,12 +177,12 @@ namespace mongo {
         }
 
         {
-            ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
+            auto [client, opCtx] = makeClientAndOpCtx(harnessHelper.get(), "numRecords");
             ASSERT_EQUALS(N, rs->numRecords(opCtx.get()));
         }
 
         {
-            ServiceContext::UniqueOperationContext opCtx(harnessHelper->newOperationContext());
+            auto [client, opCtx] = makeClientAndOpCtx(harnessHelper.get(), "numRecordsNewRs");
             rs = harnessHelper->newRecordStore();
             ASSERT_EQUALS(N, rs->numRecords(opCtx.get()));
         }
