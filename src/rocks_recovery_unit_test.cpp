@@ -88,7 +88,7 @@ namespace mongo {
             RocksRecordStore::Params params;
             params.nss = NamespaceString::createNamespaceString_forTest(ns);
             return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns), opCtx,
-                                                      params);
+                                                      params, nullptr);
         }
 
     private:
