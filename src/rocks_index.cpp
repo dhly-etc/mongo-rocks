@@ -93,6 +93,26 @@ namespace mongo {
             ss << " dup key: " << key.toString();
             return ss.str();
         }
+
+        RecordId decodeRecordIdAtEnd(const char* buffer, size_t size, KeyFormat keyFormat) {
+            switch (keyFormat) {
+                case KeyFormat::Long:
+                    return key_string::decodeRecordIdLongAtEnd(buffer, size);
+                case KeyFormat::String:
+                    return key_string::decodeRecordIdStrAtEnd(buffer, size);
+            }
+            MONGO_UNREACHABLE;
+        }
+
+        size_t sizeWithoutRecordIdAtEnd(const char* buffer, size_t size, KeyFormat keyFormat) {
+            switch (keyFormat) {
+                case KeyFormat::Long:
+                    return key_string::sizeWithoutRecordIdLongAtEnd(buffer, size);
+                case KeyFormat::String:
+                    return key_string::sizeWithoutRecordIdStrAtEnd(buffer, size);
+            }
+            MONGO_UNREACHABLE;
+        }
     }  // namespace
 
     /// RocksIndexBase
@@ -142,7 +162,7 @@ namespace mongo {
         UniqueBulkBuilder(rocksdb::ColumnFamilyHandle* cf, std::string prefix, Ordering ordering,
                           key_string::Version keyStringVersion, NamespaceString ns,
                           std::string indexName, OperationContext* opCtx, bool dupsAllowed,
-                          const BSONObj& keyPattern, bool isIdIndex)
+                          const BSONObj& keyPattern, bool isIdIndex, KeyFormat keyFormat)
             : _cf(cf),
               _prefix(std::move(prefix)),
               _ordering(ordering),
@@ -153,15 +173,15 @@ namespace mongo {
               _dupsAllowed(dupsAllowed),
               _keyString(keyStringVersion),
               _keyPattern(keyPattern),
-              _isIdIndex(isIdIndex) {}
+              _isIdIndex(isIdIndex),
+              _keyFormat(keyFormat) {}
 
         Status addKey(const key_string::Value& keyString) override {
-            auto key = key_string::toBson(keyString.getBuffer(),
-                                          key_string::sizeWithoutRecordIdLongAtEnd(
-                                              keyString.getBuffer(), keyString.getSize()),
-                                          _ordering, keyString.getTypeBits());
-            auto loc =
-                key_string::decodeRecordIdLongAtEnd(keyString.getBuffer(), keyString.getSize());
+            auto key = key_string::toBson(
+                keyString.getBuffer(),
+                sizeWithoutRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _keyFormat),
+                _ordering, keyString.getTypeBits());
+            auto loc = decodeRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _keyFormat);
             if (_isIdIndex) {
                 return addKeyTimestampUnsafe(key, loc);
             } else {
@@ -272,6 +292,7 @@ namespace mongo {
         BSONObj _keyPattern;
         const bool _isIdIndex;
         std::vector<std::pair<RecordId, key_string::TypeBits>> _records;
+        KeyFormat _keyFormat;
     };
 
     namespace {
@@ -282,12 +303,14 @@ namespace mongo {
         public:
             RocksCursorBase(OperationContext* opCtx, rocksdb::DB* db,
                             rocksdb::ColumnFamilyHandle* cf, std::string prefix, bool forward,
-                            Ordering order, key_string::Version keyStringVersion)
+                            Ordering order, key_string::Version keyStringVersion,
+                            KeyFormat keyFormat)
                 : _db(db),
                   _cf(cf),
                   _prefix(prefix),
                   _forward(forward),
                   _order(order),
+                  _keyFormat(keyFormat),
                   _keyStringVersion(keyStringVersion),
                   _key(keyStringVersion),
                   _typeBits(keyStringVersion),
@@ -401,7 +424,7 @@ namespace mongo {
         protected:
             // Called after _key has been filled in. Must not throw WriteConflictException.
             virtual void updateLocAndTypeBits() {
-                _loc = key_string::decodeRecordIdLongAtEnd(_key.getBuffer(), _key.getSize());
+                _loc = decodeRecordIdAtEnd(_key.getBuffer(), _key.getSize(), _keyFormat);
                 BufReader br(_valueSlice().data(), _valueSlice().size());
                 _typeBits.resetFromBuffer(&br);
             }
@@ -550,6 +573,7 @@ namespace mongo {
             const bool _forward;
             bool _lastMoveWasRestore = false;
             Ordering _order;
+            KeyFormat _keyFormat;
 
             // These are for storing savePosition/restorePosition state
             bool _savedEOF = false;
@@ -575,8 +599,10 @@ namespace mongo {
         public:
             RocksStandardCursor(OperationContext* opCtx, rocksdb::DB* db,
                                 rocksdb::ColumnFamilyHandle* cf, std::string prefix, bool forward,
-                                Ordering order, key_string::Version keyStringVersion)
-                : RocksCursorBase(opCtx, db, cf, prefix, forward, order, keyStringVersion) {
+                                Ordering order, key_string::Version keyStringVersion,
+                                KeyFormat keyFormat)
+                : RocksCursorBase(opCtx, db, cf, prefix, forward, order, keyStringVersion,
+                                  keyFormat) {
                 iterator();
             }
 
@@ -588,8 +614,9 @@ namespace mongo {
             RocksUniqueCursor(OperationContext* opCtx, rocksdb::DB* db,
                               rocksdb::ColumnFamilyHandle* cf, std::string prefix, bool forward,
                               Ordering order, key_string::Version keyStringVersion,
-                              std::string indexName, bool isIdIndex)
-                : RocksCursorBase(opCtx, db, cf, prefix, forward, order, keyStringVersion),
+                              KeyFormat keyFormat, std::string indexName, bool isIdIndex)
+                : RocksCursorBase(opCtx, db, cf, prefix, forward, order, keyStringVersion,
+                                  keyFormat),
                   _indexName(std::move(indexName)),
                   _isIdIndex(isIdIndex) {}
 
@@ -670,14 +697,11 @@ namespace mongo {
             return boost::none;
         }
 
-        auto sizeWithoutRecordId =
-            KeyFormat::Long == _rsKeyFormat
-                ? key_string::sizeWithoutRecordIdLongAtEnd(ksEntry->keyString.getBuffer(),
-                                                           ksEntry->keyString.getSize())
-                : key_string::sizeWithoutRecordIdStrAtEnd(ksEntry->keyString.getBuffer(),
-                                                          ksEntry->keyString.getSize());
-        if (key_string::compare(ksEntry->keyString.getBuffer(), key.getBuffer(),
-                                sizeWithoutRecordId, key.getSize()) == 0) {
+        if (key_string::compare(
+                ksEntry->keyString.getBuffer(), key.getBuffer(),
+                sizeWithoutRecordIdAtEnd(ksEntry->keyString.getBuffer(),
+                                         ksEntry->keyString.getSize(), _rsKeyFormat),
+                key.getSize()) == 0) {
             return ksEntry->loc;
         }
         return boost::none;
@@ -751,14 +775,15 @@ namespace mongo {
     std::unique_ptr<SortedDataInterface::Cursor> RocksUniqueIndex::newCursor(
         OperationContext* opCtx, bool forward) const {
         return std::make_unique<RocksUniqueCursor>(opCtx, _db, _cf, _prefix, forward, _ordering,
-                                                   _keyStringVersion, _indexName, _isIdIndex);
+                                                   _keyStringVersion, _rsKeyFormat, _indexName,
+                                                   _isIdIndex);
     }
 
     std::unique_ptr<SortedDataBuilderInterface> RocksUniqueIndex::makeBulkBuilder(
         OperationContext* opCtx, bool dupsAllowed) {
         return std::make_unique<RocksIndexBase::UniqueBulkBuilder>(
             _cf, _prefix, _ordering, _keyStringVersion, _ns, _indexName, opCtx, dupsAllowed,
-            _keyPattern, _isIdIndex);
+            _keyPattern, _isIdIndex, _rsKeyFormat);
     }
 
     Status RocksUniqueIndex::insert(OperationContext* opCtx, const key_string::Value& keyString,
@@ -766,9 +791,9 @@ namespace mongo {
                                     IncludeDuplicateRecordId includeDuplicateRecordId) {
         auto key = key_string::toBson(
             keyString.getBuffer(),
-            key_string::sizeWithoutRecordIdLongAtEnd(keyString.getBuffer(), keyString.getSize()),
+            sizeWithoutRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _rsKeyFormat),
             _ordering, keyString.getTypeBits());
-        auto loc = key_string::decodeRecordIdLongAtEnd(keyString.getBuffer(), keyString.getSize());
+        auto loc = decodeRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _rsKeyFormat);
         if (_isIdIndex) {
             return _insertTimestampUnsafe(opCtx, key, loc, dupsAllowed);
         } else {
@@ -911,9 +936,9 @@ namespace mongo {
                                    bool dupsAllowed) {
         auto key = key_string::toBson(
             keyString.getBuffer(),
-            key_string::sizeWithoutRecordIdLongAtEnd(keyString.getBuffer(), keyString.getSize()),
+            sizeWithoutRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _rsKeyFormat),
             _ordering, keyString.getTypeBits());
-        auto loc = key_string::decodeRecordIdLongAtEnd(keyString.getBuffer(), keyString.getSize());
+        auto loc = decodeRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _rsKeyFormat);
         if (_isIdIndex) {
             _unindexTimestampUnsafe(opCtx, key, loc, dupsAllowed);
         } else {
@@ -1128,7 +1153,7 @@ namespace mongo {
     std::unique_ptr<SortedDataInterface::Cursor> RocksStandardIndex::newCursor(
         OperationContext* opCtx, bool forward) const {
         return std::make_unique<RocksStandardCursor>(opCtx, _db, _cf, _prefix, forward, _ordering,
-                                                     _keyStringVersion);
+                                                     _keyStringVersion, _rsKeyFormat);
     }
 
     std::unique_ptr<SortedDataBuilderInterface> RocksStandardIndex::makeBulkBuilder(
