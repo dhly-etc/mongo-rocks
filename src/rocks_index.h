@@ -129,17 +129,17 @@ namespace mongo {
                                                RecordId rid) override;
 
     private:
-        Status _insertTimestampSafe(OperationContext* opCtx, const BSONObj& key,
-                                    const RecordId& loc, bool dupsAllowed);
+        Status _insert(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
+                       bool dupsAllowed);
 
-        Status _insertTimestampUnsafe(OperationContext* opCtx, const BSONObj& key,
-                                      const RecordId& loc, bool dupsAllowed);
+        Status _insertIntoIdIndex(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
+                                  bool dupsAllowed);
 
-        void _unindexTimestampUnsafe(OperationContext* opCtx, const BSONObj& key,
-                                     const RecordId& loc, bool dupsAllowed);
+        void _unindexFromIdIndex(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
+                                 bool dupsAllowed);
 
-        void _unindexTimestampSafe(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
-                                   bool dupsAllowed);
+        void _unindex(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
+                      bool dupsAllowed);
 
         bool _keyExistsTimestampSafe(OperationContext* opCtx, const key_string::Value& prefixedKey);
 

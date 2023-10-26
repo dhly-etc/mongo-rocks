@@ -794,11 +794,8 @@ namespace mongo {
             sizeWithoutRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _rsKeyFormat),
             _ordering, keyString.getTypeBits());
         auto loc = decodeRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _rsKeyFormat);
-        if (_isIdIndex) {
-            return _insertTimestampUnsafe(opCtx, key, loc, dupsAllowed);
-        } else {
-            return _insertTimestampSafe(opCtx, key, loc, dupsAllowed);
-        }
+        return _isIdIndex ? _insertIntoIdIndex(opCtx, key, loc, dupsAllowed)
+                          : _insert(opCtx, key, loc, dupsAllowed);
     }
 
     bool RocksUniqueIndex::_keyExistsTimestampSafe(OperationContext* opCtx,
@@ -812,8 +809,8 @@ namespace mongo {
         return iter->Valid();
     }
 
-    Status RocksUniqueIndex::_insertTimestampSafe(OperationContext* opCtx, const BSONObj& key,
-                                                  const RecordId& loc, bool dupsAllowed) {
+    Status RocksUniqueIndex::_insert(OperationContext* opCtx, const BSONObj& key,
+                                     const RecordId& loc, bool dupsAllowed) {
         auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
         invariant(ru);
         invariant(ru->getTransaction());
@@ -838,11 +835,12 @@ namespace mongo {
         return Status::OK();
     }
 
-    Status RocksUniqueIndex::_insertTimestampUnsafe(OperationContext* opCtx, const BSONObj& key,
-                                                    const RecordId& loc, bool dupsAllowed) {
+    Status RocksUniqueIndex::_insertIntoIdIndex(OperationContext* opCtx, const BSONObj& key,
+                                                const RecordId& loc, bool dupsAllowed) {
         dassert(opCtx->lockState()->isWriteLocked());
         invariant(loc.isValid());
         dassert(!hasFieldNames(key));
+        invariant(!dupsAllowed);
 
         auto encodedKey = key_string::Builder{_keyStringVersion, key, _ordering}.getValueCopy();
         std::string prefixedKey(_makePrefixedKey(_prefix, encodedKey));
@@ -857,67 +855,26 @@ namespace mongo {
         auto getStatus = rocksPrepareConflictRetry(
             opCtx, [&] { return ru->Get(_cf, prefixedKey, &currentValue); });
 
-        if (getStatus.IsNotFound()) {
-            // nothing here. just insert the value
-            key_string::Builder value(_keyStringVersion, loc);
-            if (!encodedKey.getTypeBits().isAllZeros()) {
-                value.appendTypeBits(encodedKey.getTypeBits());
-            }
-            rocksdb::Slice valueSlice(value.getBuffer(), value.getSize());
-            invariantRocksOK(
-                ROCKS_OP_CHECK(ru->getTransaction()->Put(_cf, prefixedKey, valueSlice)));
-            return Status::OK();
-        }
-
-        if (!getStatus.ok()) {
-            return rocksToMongoStatus(getStatus);
-        }
-
-        // we are in a weird state where there might be multiple values for a key
-        // we put them all in the "list"
-        // Note that we can't omit AllZeros when there are multiple locs for a value. When we remove
-        // down to a single value, it will be cleaned up.
-
-        bool insertedLoc = false;
-        key_string::Builder valueVector(_keyStringVersion);
-        BufReader br(currentValue.data(), currentValue.size());
-        while (br.remaining()) {
-            RecordId locInIndex = key_string::decodeRecordIdLong(&br);
-            if (loc == locInIndex) {
-                return Status::OK();  // already in index
-            }
-
-            if (!insertedLoc && loc < locInIndex) {
-                valueVector.appendRecordId(loc);
-                valueVector.appendTypeBits(encodedKey.getTypeBits());
-                insertedLoc = true;
-            }
-
-            // Copy from old to new value
-            valueVector.appendRecordId(locInIndex);
-            valueVector.appendTypeBits(key_string::TypeBits::fromBuffer(_keyStringVersion, &br));
-        }
-
-        if (!dupsAllowed) {
+        if (getStatus.ok()) {
             return buildDupKeyErrorStatus(key, _ns, _indexName, _keyPattern, {});
         }
 
-        if (!insertedLoc) {
-            // This loc is higher than all currently in the index for this key
-            valueVector.appendRecordId(loc);
-            valueVector.appendTypeBits(encodedKey.getTypeBits());
+        if (!getStatus.IsNotFound()) {
+            return rocksToMongoStatus(getStatus);
         }
 
-        rocksdb::Slice valueVectorSlice(valueVector.getBuffer(), valueVector.getSize());
-        auto txn = ru->getTransaction();
-        invariant(txn);
-
-        invariantRocksOK(ROCKS_OP_CHECK(txn->Put(_cf, prefixedKey, valueVectorSlice)));
+        // nothing here. just insert the value
+        key_string::Builder value(_keyStringVersion, loc);
+        if (!encodedKey.getTypeBits().isAllZeros()) {
+            value.appendTypeBits(encodedKey.getTypeBits());
+        }
+        rocksdb::Slice valueSlice(value.getBuffer(), value.getSize());
+        invariantRocksOK(ROCKS_OP_CHECK(ru->getTransaction()->Put(_cf, prefixedKey, valueSlice)));
         return Status::OK();
     }
 
-    void RocksUniqueIndex::_unindexTimestampSafe(OperationContext* opCtx, const BSONObj& key,
-                                                 const RecordId& loc, bool dupsAllowed) {
+    void RocksUniqueIndex::_unindex(OperationContext* opCtx, const BSONObj& key,
+                                    const RecordId& loc, bool dupsAllowed) {
         auto encodedKey =
             key_string::Builder(_keyStringVersion, key, _ordering, loc).getValueCopy();
         std::string prefixedKey(_makePrefixedKey(_prefix, encodedKey));
@@ -940,14 +897,14 @@ namespace mongo {
             _ordering, keyString.getTypeBits());
         auto loc = decodeRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _rsKeyFormat);
         if (_isIdIndex) {
-            _unindexTimestampUnsafe(opCtx, key, loc, dupsAllowed);
+            _unindexFromIdIndex(opCtx, key, loc, dupsAllowed);
         } else {
-            _unindexTimestampSafe(opCtx, key, loc, dupsAllowed);
+            _unindex(opCtx, key, loc, dupsAllowed);
         }
     }
 
-    void RocksUniqueIndex::_unindexTimestampUnsafe(OperationContext* opCtx, const BSONObj& key,
-                                                   const RecordId& loc, bool dupsAllowed) {
+    void RocksUniqueIndex::_unindexFromIdIndex(OperationContext* opCtx, const BSONObj& key,
+                                               const RecordId& loc, bool dupsAllowed) {
         auto encodedKey = key_string::Builder{_keyStringVersion, key, _ordering}.getValueCopy();
         std::string prefixedKey(_makePrefixedKey(_prefix, encodedKey));
 
@@ -1054,43 +1011,11 @@ namespace mongo {
 
     Status RocksUniqueIndex::dupKeyCheck(OperationContext* opCtx,
                                          const key_string::Value& keyString) {
-        if (!_isIdIndex) {
-            if (_keyExistsTimestampSafe(opCtx, keyString)) {
-                return buildDupKeyErrorStatus(keyString, _ns, _indexName, _keyPattern, {},
-                                              _ordering);
-            } else {
-                return Status::OK();
-            }
-        }
-        std::string prefixedKey(_makePrefixedKey(_prefix, keyString));
+        invariant(!_isIdIndex);
 
-        auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
-        std::string value;
-        auto getStatus =
-            rocksPrepareConflictRetry(opCtx, [&] { return ru->Get(_cf, prefixedKey, &value); });
-        if (!getStatus.ok() && !getStatus.IsNotFound()) {
-            return rocksToMongoStatus(getStatus);
-        } else if (getStatus.IsNotFound()) {
-            // not found, not duplicate key
-            return Status::OK();
-        }
-
-        // If the key exists, check if we already have this loc at this key. If so, we don't
-        // consider that to be a dup.
-        int records = 0;
-        BufReader br(value.data(), value.size());
-        while (br.remaining()) {
-            key_string::decodeRecordIdLong(&br);
-            records++;
-
-            key_string::TypeBits::fromBuffer(_keyStringVersion,
-                                             &br);  // Just calling this to advance reader.
-        }
-
-        if (records > 1) {
-            return buildDupKeyErrorStatus(keyString, _ns, _indexName, _keyPattern, {}, _ordering);
-        }
-        return Status::OK();
+        return _keyExistsTimestampSafe(opCtx, keyString)
+                   ? buildDupKeyErrorStatus(keyString, _ns, _indexName, _keyPattern, {}, _ordering)
+                   : Status::OK();
     }
 
     void RocksUniqueIndex::insertWithRecordIdInValue_forTest(OperationContext* opCtx,
