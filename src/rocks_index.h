@@ -35,6 +35,7 @@
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/storage/key_string.h"
 #include "mongo/db/storage/sorted_data_interface.h"
+#include "rocks_recovery_unit.h"
 
 #pragma once
 
@@ -147,7 +148,8 @@ namespace mongo {
         void _unindex(OperationContext* opCtx, const BSONObj& key, const RecordId& loc,
                       bool dupsAllowed);
 
-        bool _keyExistsTimestampSafe(OperationContext* opCtx, const key_string::Value& prefixedKey);
+        std::unique_ptr<RocksIterator> _keyExists(OperationContext* opCtx,
+                                                  const key_string::Value& prefixedKey);
 
         const bool _partial;
         const bool _isIdIndex;

@@ -857,15 +857,15 @@ namespace mongo {
                           : _insert(opCtx, key, loc, dupsAllowed);
     }
 
-    bool RocksUniqueIndex::_keyExistsTimestampSafe(OperationContext* opCtx,
-                                                   const key_string::Value& key) {
+    std::unique_ptr<RocksIterator> RocksUniqueIndex::_keyExists(OperationContext* opCtx,
+                                                                const key_string::Value& key) {
         std::unique_ptr<RocksIterator> iter;
         iter.reset(RocksRecoveryUnit::getRocksRecoveryUnit(opCtx)->NewIterator(_cf, _prefix));
         auto s = rocksPrepareConflictRetry(opCtx, [&] {
             iter->SeekPrefix(rocksdb::Slice(key.getBuffer(), key.getSize()));
             return iter->status();
         });
-        return iter->Valid();
+        return iter->Valid() ? std::move(iter) : nullptr;
     }
 
     Status RocksUniqueIndex::_insert(OperationContext* opCtx, const BSONObj& key,
@@ -877,7 +877,7 @@ namespace mongo {
             auto encodedKey = key_string::Builder{_keyStringVersion, key, _ordering}.getValueCopy();
             const std::string prefixedKey(RocksIndexBase::_makePrefixedKey(_prefix, encodedKey));
             invariantRocksOK(ru->getTransaction()->GetForUpdate(_cf, prefixedKey));
-            if (_keyExistsTimestampSafe(opCtx, encodedKey)) {
+            if (_keyExists(opCtx, encodedKey)) {
                 return buildDupKeyErrorStatus(key, _ns, _indexName, _keyPattern, {});
             }
         }
@@ -1072,7 +1072,23 @@ namespace mongo {
                                          const key_string::Value& keyString) {
         invariant(!_isIdIndex);
 
-        return _keyExistsTimestampSafe(opCtx, keyString)
+        auto it = _keyExists(opCtx, keyString);
+        if (!it) {
+            return Status::OK();
+        }
+
+        rocksPrepareConflictRetry(opCtx, [&] {
+            it->Next();
+            return it->status();
+        });
+
+        if (!it->Valid()) {
+            return Status::OK();
+        }
+
+        auto key = it->key();
+        return key.size() != keyString.getSize() ||
+                       std::memcmp(key.data(), keyString.getBuffer(), key.size()) != 0
                    ? buildDupKeyErrorStatus(keyString, _ns, _indexName, _keyPattern, {}, _ordering)
                    : Status::OK();
     }
