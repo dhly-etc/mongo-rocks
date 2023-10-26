@@ -85,6 +85,13 @@ namespace mongo {
             KeyFormat keyFormat = KeyFormat::Long) override {
             auto opCtx = newOperationContext();
 
+            if (options.clusteredIndex) {
+                uassert(
+                    6144102,
+                    "RecordStore with CollectionOptions.clusteredIndex requires KeyFormat::String",
+                    keyFormat == KeyFormat::String);
+            }
+
             RocksRecordStore::Params params;
             params.nss = NamespaceString::createNamespaceString_forTest(ns);
             params.uuid = options.uuid;
