@@ -404,8 +404,10 @@ namespace mongo {
         invariant(!_inUnitOfWork(), toString(_state));
         _deltaCounters.clear();
         if (_isActive()) {
-            // Can't be in a WriteUnitOfWork, so safe to rollback
-            _txnClose(false);
+            // Can't be in a WriteUnitOfWork, so safe to rollback if the AbandonSnapshotMode is
+            // kAbort. If kCommit, however, then any active cursors will remain positioned and
+            // valid.
+            _txnClose(_abandonSnapshotMode == AbandonSnapshotMode::kCommit /* commit */);
         }
         _setState(State::kInactive);
     }
