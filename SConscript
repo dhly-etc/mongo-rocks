@@ -11,9 +11,7 @@ if conf.CheckLibWithHeader("lz4", ["lz4.h", "lz4hc.h"], "C", "LZ4_versionNumber(
 
 env.InjectMongoIncludePaths()
 
-env.InjectThirdParty(libraries=[
-    's2',
-])  # for Encoder and Decoder
+env.InjectThirdParty(libraries=['rocksdb'])
 
 conf.Finish()
 
@@ -65,12 +63,13 @@ env.Library(
         '$BUILD_DIR/mongo/util/background_job',
         '$BUILD_DIR/mongo/util/concurrency/ticketholder',
         '$BUILD_DIR/mongo/util/processinfo',
+        '$BUILD_DIR/third_party/rocksdb/rocksdb',
         '$BUILD_DIR/third_party/shim_snappy',
     ],
     LIBDEPS_PRIVATE=[
         '$BUILD_DIR/mongo/db/snapshot_window_options',
     ],
-    SYSLIBDEPS=["rocksdb", "z", "bz2"]  #z and bz2 are dependencies for rocks
+    SYSLIBDEPS=["bz2"]  #z and bz2 are dependencies for rocks
     + dynamic_syslibdeps)
 
 env.Library(
