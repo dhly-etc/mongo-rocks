@@ -538,8 +538,8 @@ namespace mongo {
             auto si = std::make_unique<RocksStandardIndex>(
                 _db.get(), _defaultCf.get(), prefix, *collOptions.uuid, ident.toString(),
                 Ordering::make(desc->keyPattern()),
-                collOptions.clusteredIndex ? KeyFormat::String : KeyFormat::Long,
-                std::move(config));
+                collOptions.clusteredIndex ? KeyFormat::String : KeyFormat::Long, std::move(config),
+                nss, desc->indexName(), desc->keyPattern());
             if (rocksGlobalOptions.singleDeleteIndex) {
                 si->enableSingleDelete();
             }

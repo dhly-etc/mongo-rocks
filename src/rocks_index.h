@@ -54,7 +54,8 @@ namespace mongo {
     public:
         RocksIndexBase(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
                        const UUID& uuid, std::string ident, Ordering order, KeyFormat keyFormat,
-                       const BSONObj& config);
+                       const BSONObj& config, NamespaceString ns, std::string indexName,
+                       const BSONObj& keyPattern);
 
         boost::optional<RecordId> findLoc(OperationContext* opCtx,
                                           const key_string::Value& keyString) const override;
@@ -97,6 +98,10 @@ namespace mongo {
 
         // very approximate index storage size
         std::atomic<long long> _indexStorageSize;
+
+        NamespaceString _ns;
+        std::string _indexName;
+        const BSONObj _keyPattern;
 
         class StandardBulkBuilder;
         class UniqueBulkBuilder;
@@ -144,9 +149,6 @@ namespace mongo {
 
         bool _keyExistsTimestampSafe(OperationContext* opCtx, const key_string::Value& prefixedKey);
 
-        NamespaceString _ns;
-        std::string _indexName;
-        const BSONObj _keyPattern;
         const bool _partial;
         const bool _isIdIndex;
     };
@@ -155,7 +157,8 @@ namespace mongo {
     public:
         RocksStandardIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
                            const UUID& uuid, std::string ident, Ordering order, KeyFormat keyFormat,
-                           const BSONObj& config);
+                           const BSONObj& config, NamespaceString ns, std::string indexName,
+                           const BSONObj& keyPattern);
 
         Status insert(OperationContext* opCtx, const key_string::Value& keyString, bool dupsAllowed,
                       IncludeDuplicateRecordId includeDuplicateRecordId =

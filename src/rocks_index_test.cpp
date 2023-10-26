@@ -75,7 +75,9 @@ namespace mongo {
                 } else {
                     return std::make_unique<RocksStandardIndex>(
                         _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", UUID::gen(),
-                        "ident", _order, keyFormat, configBuilder.obj());
+                        "ident", _order, keyFormat, configBuilder.obj(),
+                        NamespaceString::createNamespaceString_forTest("test.rocks"), "testIndex",
+                        BSONObj());
                 }
             }
 

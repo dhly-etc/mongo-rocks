@@ -652,7 +652,9 @@ namespace mongo {
     /// RocksIndexBase
     RocksIndexBase::RocksIndexBase(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf,
                                    std::string prefix, const UUID& uuid, std::string ident,
-                                   Ordering order, KeyFormat keyFormat, const BSONObj& config)
+                                   Ordering order, KeyFormat keyFormat, const BSONObj& config,
+                                   NamespaceString ns, std::string indexName,
+                                   const BSONObj& keyPattern)
         : SortedDataInterface(
               ident,
               [&] {
@@ -677,7 +679,10 @@ namespace mongo {
           _db(db),
           _cf(cf),
           _prefix(prefix),
-          _ident(std::move(ident)) {
+          _ident(std::move(ident)),
+          _ns(std::move(ns)),
+          _indexName(std::move(indexName)),
+          _keyPattern(keyPattern) {
         uint64_t storageSize;
         std::string nextPrefix = rocksGetNextPrefix(_prefix);
         rocksdb::Range wholeRange(_prefix, nextPrefix);
@@ -765,10 +770,8 @@ namespace mongo {
                                        Ordering order, KeyFormat keyFormat, const BSONObj& config,
                                        NamespaceString ns, std::string indexName,
                                        const BSONObj& keyPattern, bool partial, bool isIdIdx)
-        : RocksIndexBase(db, cf, prefix, uuid, ident, order, keyFormat, config),
-          _ns(std::move(ns)),
-          _indexName(std::move(indexName)),
-          _keyPattern(keyPattern),
+        : RocksIndexBase(db, cf, prefix, uuid, ident, order, keyFormat, config, std::move(ns),
+                         std::move(indexName), keyPattern),
           _partial(partial),
           _isIdIndex(isIdIdx) {}
 
@@ -1028,15 +1031,47 @@ namespace mongo {
     RocksStandardIndex::RocksStandardIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf,
                                            std::string prefix, const UUID& uuid, std::string ident,
                                            Ordering order, KeyFormat keyFormat,
-                                           const BSONObj& config)
-        : RocksIndexBase(db, cf, prefix, uuid, ident, order, keyFormat, config),
+                                           const BSONObj& config, NamespaceString ns,
+                                           std::string indexName, const BSONObj& keyPattern)
+        : RocksIndexBase(db, cf, prefix, uuid, ident, order, keyFormat, config, std::move(ns),
+                         std::move(indexName), keyPattern),
           useSingleDelete(false) {}
 
     Status RocksStandardIndex::insert(OperationContext* opCtx, const key_string::Value& keyString,
                                       bool dupsAllowed,
                                       IncludeDuplicateRecordId includeDuplicateRecordId) {
         dassert(opCtx->lockState()->isWriteLocked());
-        invariant(dupsAllowed);
+
+        if (!dupsAllowed) {
+            auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
+            invariant(ru);
+            invariant(ru->getTransaction());
+
+            key_string::Builder encodedKeyBuilder{_keyStringVersion, _ordering};
+            encodedKeyBuilder.resetFromBuffer(
+                keyString.getBuffer(),
+                sizeWithoutRecordIdAtEnd(keyString.getBuffer(), keyString.getSize(), _rsKeyFormat));
+            auto encodedKey = encodedKeyBuilder.getValueCopy();
+
+            const std::string prefixedKey(RocksIndexBase::_makePrefixedKey(_prefix, encodedKey));
+            invariantRocksOK(ru->getTransaction()->GetForUpdate(_cf, prefixedKey));
+
+            auto keyExists = [&] {
+                std::unique_ptr<RocksIterator> iter;
+                iter.reset(
+                    RocksRecoveryUnit::getRocksRecoveryUnit(opCtx)->NewIterator(_cf, _prefix));
+                auto s = rocksPrepareConflictRetry(opCtx, [&] {
+                    iter->SeekPrefix(rocksdb::Slice(encodedKey.getBuffer(), encodedKey.getSize()));
+                    return iter->status();
+                });
+                return iter->Valid();
+            }();
+
+            if (keyExists) {
+                return buildDupKeyErrorStatus(keyString, _ns, _indexName, _keyPattern, {},
+                                              _ordering);
+            }
+        }
 
         std::string prefixedKey(_makePrefixedKey(_prefix, keyString));
         auto ru = RocksRecoveryUnit::getRocksRecoveryUnit(opCtx);
