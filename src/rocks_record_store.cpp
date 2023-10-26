@@ -406,12 +406,12 @@ namespace mongo {
 
     Status RocksRecordStore::doInsertRecords(OperationContext* opCtx, std::vector<Record>* records,
                                              const std::vector<Timestamp>& timestamps) {
+        invariant(opCtx->lockState()->inAWriteUnitOfWork());
         auto insertRecord = [this](OperationContext* opCtx, const Record& record,
                                    Timestamp timestamp) {
             auto data = record.data.data();
             auto len = record.data.size();
 
-            dassert(opCtx->lockState()->isWriteLocked());
             if (_isCapped && len > _cappedMaxSize) {
                 return StatusWith<RecordId>(ErrorCodes::BadValue,
                                             "object to insert exceeds cappedMaxSize");
@@ -841,8 +841,7 @@ namespace mongo {
         switch (keyFormat) {
             case KeyFormat::Long:
                 invariant(slice.size() == sizeof(int64_t));
-                return RecordId{
-                    endian::bigToNative(*reinterpret_cast<const int64_t*>(slice.data()))};
+                return RecordId{ConstDataView(slice.data()).read<BigEndian<int64_t>>()};
             case KeyFormat::String:
                 return RecordId{slice.data(), static_cast<int32_t>(slice.size())};
         }
