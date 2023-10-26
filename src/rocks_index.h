@@ -53,7 +53,8 @@ namespace mongo {
 
     public:
         RocksIndexBase(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
-                       const UUID& uuid, std::string ident, Ordering order, const BSONObj& config);
+                       const UUID& uuid, std::string ident, Ordering order, KeyFormat keyFormat,
+                       const BSONObj& config);
 
         boost::optional<RecordId> findLoc(OperationContext* opCtx,
                                           const key_string::Value& keyString) const override;
@@ -105,9 +106,9 @@ namespace mongo {
     class RocksUniqueIndex : public RocksIndexBase {
     public:
         RocksUniqueIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
-                         const UUID& uuid, std::string ident, Ordering order, const BSONObj& config,
-                         NamespaceString ns, std::string indexName, const BSONObj& keyPattern,
-                         bool partial = false, bool isIdIdx = false);
+                         const UUID& uuid, std::string ident, Ordering order, KeyFormat keyFormat,
+                         const BSONObj& config, NamespaceString ns, std::string indexName,
+                         const BSONObj& keyPattern, bool partial = false, bool isIdIdx = false);
 
         Status insert(OperationContext* opCtx, const key_string::Value& keyString, bool dupsAllowed,
                       IncludeDuplicateRecordId includeDuplicateRecordId =
@@ -153,7 +154,7 @@ namespace mongo {
     class RocksStandardIndex : public RocksIndexBase {
     public:
         RocksStandardIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf, std::string prefix,
-                           const UUID& uuid, std::string ident, Ordering order,
+                           const UUID& uuid, std::string ident, Ordering order, KeyFormat keyFormat,
                            const BSONObj& config);
 
         Status insert(OperationContext* opCtx, const key_string::Value& keyString, bool dupsAllowed,

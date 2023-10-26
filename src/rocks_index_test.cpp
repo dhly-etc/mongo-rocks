@@ -69,13 +69,13 @@ namespace mongo {
                 if (unique) {
                     return std::make_unique<RocksUniqueIndex>(
                         _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", UUID::gen(),
-                        "ident", _order, configBuilder.obj(),
+                        "ident", _order, keyFormat, configBuilder.obj(),
                         NamespaceString::createNamespaceString_forTest("test.rocks"), "testIndex",
                         BSONObj(), partial);
                 } else {
                     return std::make_unique<RocksStandardIndex>(
                         _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", UUID::gen(),
-                        "ident", _order, configBuilder.obj());
+                        "ident", _order, keyFormat, configBuilder.obj());
                 }
             }
 
@@ -86,7 +86,7 @@ namespace mongo {
 
                 return std::make_unique<RocksUniqueIndex>(
                     _engine.getDB(), _engine.getDefaultCf_ForTest(), "prefix", UUID::gen(), "ident",
-                    _order, configBuilder.obj(),
+                    _order, KeyFormat::Long, configBuilder.obj(),
                     NamespaceString::createNamespaceString_forTest("test.rocks"), "_id_",
                     BSON("_id" << 1), false, true);
             }

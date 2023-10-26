@@ -652,7 +652,7 @@ namespace mongo {
     /// RocksIndexBase
     RocksIndexBase::RocksIndexBase(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf,
                                    std::string prefix, const UUID& uuid, std::string ident,
-                                   Ordering order, const BSONObj& config)
+                                   Ordering order, KeyFormat keyFormat, const BSONObj& config)
         : SortedDataInterface(
               ident,
               [&] {
@@ -673,7 +673,7 @@ namespace mongo {
               }() >= kKeyStringV1Version
                   ? key_string::Version::V1
                   : key_string::Version::V0,
-              order, KeyFormat::Long),
+              order, keyFormat),
           _db(db),
           _cf(cf),
           _prefix(prefix),
@@ -762,10 +762,10 @@ namespace mongo {
 
     RocksUniqueIndex::RocksUniqueIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf,
                                        std::string prefix, const UUID& uuid, std::string ident,
-                                       Ordering order, const BSONObj& config, NamespaceString ns,
-                                       std::string indexName, const BSONObj& keyPattern,
-                                       bool partial, bool isIdIdx)
-        : RocksIndexBase(db, cf, prefix, uuid, ident, order, config),
+                                       Ordering order, KeyFormat keyFormat, const BSONObj& config,
+                                       NamespaceString ns, std::string indexName,
+                                       const BSONObj& keyPattern, bool partial, bool isIdIdx)
+        : RocksIndexBase(db, cf, prefix, uuid, ident, order, keyFormat, config),
           _ns(std::move(ns)),
           _indexName(std::move(indexName)),
           _keyPattern(keyPattern),
@@ -1027,8 +1027,10 @@ namespace mongo {
     /// RocksStandardIndex
     RocksStandardIndex::RocksStandardIndex(rocksdb::DB* db, rocksdb::ColumnFamilyHandle* cf,
                                            std::string prefix, const UUID& uuid, std::string ident,
-                                           Ordering order, const BSONObj& config)
-        : RocksIndexBase(db, cf, prefix, uuid, ident, order, config), useSingleDelete(false) {}
+                                           Ordering order, KeyFormat keyFormat,
+                                           const BSONObj& config)
+        : RocksIndexBase(db, cf, prefix, uuid, ident, order, keyFormat, config),
+          useSingleDelete(false) {}
 
     Status RocksStandardIndex::insert(OperationContext* opCtx, const key_string::Value& keyString,
                                       bool dupsAllowed,
