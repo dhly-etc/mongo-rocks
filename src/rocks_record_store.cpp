@@ -109,7 +109,8 @@ namespace mongo {
     }
 
     RocksRecordStore::RocksRecordStore(RocksEngine* engine, rocksdb::ColumnFamilyHandle* cf,
-                                       OperationContext* opCtx, Params params)
+                                       OperationContext* opCtx, Params params,
+                                       std::unique_ptr<RocksRecordStoreOplogThread> oplogThread)
         : RecordStore(params.uuid, params.ident, params.isCapped),
           _engine(engine),
           _db(engine->getDB()),
@@ -132,7 +133,8 @@ namespace mongo {
                                ? std::string("\0\0\0\0", 4) + "cappedOldestKey-" + params.ident
                                : ""),
           _shuttingDown(false),
-          _tracksSizeAdjustments(params.tracksSizeAdjustments) {
+          _tracksSizeAdjustments(params.tracksSizeAdjustments),
+          _oplogThread(std::move(oplogThread)) {
         LOGV2_DEBUG(0, 2, "Opening collection", "namespace"_attr = params.nss,
                     "prefix"_attr = rocksdb::Slice(_prefix).ToString(true));
 
@@ -170,10 +172,12 @@ namespace mongo {
             }
         }
 
-        _hasBackgroundThread = RocksEngine::initRsOplogBackgroundThread(params.nss);
         invariant(_isOplog == (_oplogManager != nullptr));
         invariant(_isOplog == NamespaceString::oplog(_cf->GetName()));
         if (_isOplog) {
+            if (_oplogThread && !storageGlobalParams.repair) {
+                _oplogThread->go();
+            }
             _engine->startOplogManager(opCtx, this);
         }
     }

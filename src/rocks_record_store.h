@@ -45,6 +45,7 @@
 #include "mongo/util/fail_point.h"
 #include "mongo/util/timer.h"
 #include "mongo_rate_limiter_checker.h"
+#include "rocks_record_store_oplog_thread.h"
 
 /**
  * Either executes the specified operation and returns it's value or randomly throws a write
@@ -97,7 +98,8 @@ namespace mongo {
             bool tracksSizeAdjustments = true;
         };
         RocksRecordStore(RocksEngine* engine, rocksdb::ColumnFamilyHandle* cf,
-                         OperationContext* opCtx, Params params);
+                         OperationContext* opCtx, Params params,
+                         std::unique_ptr<RocksRecordStoreOplogThread> oplogThread);
 
         virtual ~RocksRecordStore();
 
@@ -306,8 +308,9 @@ namespace mongo {
         const std::string _cappedOldestKey;
 
         bool _shuttingDown;
-        bool _hasBackgroundThread;
         bool _tracksSizeAdjustments;
+
+        std::unique_ptr<RocksRecordStoreOplogThread> _oplogThread;
     };
 
     // Rocks failpoint to throw write conflict exceptions randomly

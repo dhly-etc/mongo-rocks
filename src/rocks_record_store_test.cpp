@@ -98,7 +98,7 @@ namespace mongo {
             params.keyFormat = keyFormat;
 
             return std::make_unique<RocksRecordStore>(&_engine, _engine.getCf_ForTest(ns),
-                                                      opCtx.get(), params);
+                                                      opCtx.get(), params, nullptr);
         }
 
         std::unique_ptr<RecordStore> newOplogRecordStore() override {
@@ -114,8 +114,7 @@ namespace mongo {
 
             auto rs = std::make_unique<RocksRecordStore>(
                 &_engine, _engine.getCf_ForTest(params.nss.toStringForResourceId()), opCtx.get(),
-                params);
-            _engine.startOplogManager(opCtx.get(), rs.get());
+                params, nullptr);
             return rs;
         }
 

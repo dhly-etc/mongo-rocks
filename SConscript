@@ -23,6 +23,7 @@ env.Library(
         'src/rocks_global_options.cpp',
         'src/rocks_engine.cpp',
         'src/rocks_record_store.cpp',
+        'src/rocks_record_store_oplog_thread.cpp',
         'src/rocks_recovery_unit.cpp',
         'src/rocks_index.cpp',
         'src/rocks_durability_manager.cpp',
