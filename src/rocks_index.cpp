@@ -477,18 +477,14 @@ namespace mongo {
                 auto* iter = iterator();
                 const rocksdb::Slice keySlice(query.getBuffer(), query.getSize());
                 rocksPrepareConflictRetry(_opCtx, [&] {
-                    iter->Seek(keySlice);
+                    if (_forward) {
+                        iter->Seek(keySlice);
+                    } else {
+                        iter->SeekForPrev(keySlice);
+                    }
                     return iter->status();
                 });
                 if (!_updateOnIteratorValidity()) {
-                    if (!_forward) {
-                        // this will give lower bound behavior for backwards
-                        rocksPrepareConflictRetry(_opCtx, [&] {
-                            iter->SeekToLast();
-                            return iter->status();
-                        });
-                        _updateOnIteratorValidity();
-                    }
                     return false;
                 }
 
@@ -496,17 +492,56 @@ namespace mongo {
                     return true;
                 }
 
-                if (!_forward) {
-                    // if we can't find the exact result going backwards, we
-                    // need to call Prev() so that we're at the first value
-                    // less than (to the left of) what we were searching for,
-                    // rather than the first value greater than (to the right
-                    // of) the value we were searching for.
+                auto found = iter->key();
+                int cmp = std::memcmp(found.data(), keySlice.data(),
+                                      std::min(found.size(), keySlice.size()));
+
+                // Make sure we land on a matching key (after/before for forward/reverse).
+                // If this operation is ignoring prepared updates and search_near() lands on a key
+                // that compares lower than the search key (for a forward cursor), calling next() is
+                // not guaranteed to return a key that compares greater than the search key. This is
+                // because ignoring prepare conflicts does not provide snapshot isolation and the
+                // call to next() may land on a newly-committed prepared entry. We must advance our
+                // cursor until we find a key that compares greater than the search key. The same
+                // principle applies to reverse cursors. See SERVER-56839.
+                const bool enforcingPrepareConflicts =
+                    _opCtx->recoveryUnit()->getPrepareConflictBehavior() ==
+                    PrepareConflictBehavior::kEnforce;
+                rocksdb::Slice curKey;
+                while (_forward ? cmp < 0 : cmp > 0) {
                     rocksPrepareConflictRetry(_opCtx, [&] {
-                        iter->Prev();
+                        if (_forward) {
+                            iter->Next();
+                        } else {
+                            iter->Prev();
+                        }
                         return iter->status();
                     });
-                    _updateOnIteratorValidity();
+
+                    if (!_updateOnIteratorValidity()) {
+                        break;
+                    }
+
+                    if (!kDebugBuild && enforcingPrepareConflicts) {
+                        break;
+                    }
+
+                    rocksdb::Slice key;
+                    rocksPrepareConflictRetry(_opCtx, [&] {
+                        key = iter->key();
+                        return iter->status();
+                    });
+
+                    cmp = std::memcmp(curKey.data(), keySlice.data(),
+                                      std::min(curKey.size(), keySlice.size()));
+
+                    if (enforcingPrepareConflicts) {
+                        // If we are enforcing prepare conflicts, calling next() or prev() must
+                        // always give us a key that compares, respectively, greater than or less
+                        // than our search key. An exact match is also possible in the case of _id
+                        // indexes, because the recordid is not a part of the key.
+                        dassert(_forward ? cmp >= 0 : cmp <= 0);
+                    }
                 }
 
                 return false;
@@ -623,6 +658,27 @@ namespace mongo {
             bool isRecordIdAtEndOfKeyString() const override {
                 return _key.getSize() !=
                        key_string::getKeySize(_key.getBuffer(), _key.getSize(), _order, _typeBits);
+            }
+
+            void restore() override {
+                RocksCursorBase::restore();
+
+                auto it = iterator();
+                if (!_lastMoveWasRestore || !it->Valid()) {
+                    return;
+                }
+
+                auto keySize =
+                    key_string::getKeySize(_key.getBuffer(), _key.getSize(), _order, _typeBits);
+
+                // This check is only to avoid returning the same key again after a restore. Keys
+                // shorter than _key cannot have "prefix key" same as _key. Therefore we care only
+                // about the keys with size greater than or equal to that of the _key.
+                auto itKey = it->key();
+                if (itKey.size() >= keySize &&
+                    std::memcmp(_key.getBuffer(), itKey.data(), keySize) == 0) {
+                    _lastMoveWasRestore = false;
+                }
             }
 
             void updateLocAndTypeBits() {
