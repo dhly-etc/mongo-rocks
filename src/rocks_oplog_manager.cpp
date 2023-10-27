@@ -31,6 +31,7 @@
 
 #include <cstring>
 
+#include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/logv2/log.h"
 #include "mongo/platform/basic.h"
 #include "mongo/platform/mutex.h"
@@ -76,9 +77,14 @@ namespace mongo {
             setOplogReadTimestamp(oplogVisibility);
             LOGV2_DEBUG(0, 1, "Setting oplog visibility at startup",
                         "value"_attr = oplogVisibility);
-        } else {
+        } else if (repl::ReplicationCoordinator::get(opCtx)->getSettings().isReplSet()) {
             // Avoid setting oplog visibility to 0. That means "everything is visible".
-            setOplogReadTimestamp(Timestamp(kMinimumTimestamp));
+            setOplogReadTimestamp(Timestamp(StorageEngine::kMinimumTimestamp));
+        } else {
+            // Use max Timestamp to disable oplog visibility in standalone mode. The read timestamp
+            // may be interpreted as signed so we need to use signed int64_t max to make sure it is
+            // always larger than any user 'ts' field.
+            setOplogReadTimestamp(Timestamp(std::numeric_limits<int64_t>::max()));
         }
 
         // Need to obtain the mutex before starting the thread, as otherwise it may race ahead
@@ -230,7 +236,6 @@ namespace mongo {
             }
             invariant(_opsWaitingForJournal);
             _opsWaitingForJournal = false;
-            lk.unlock();
 
             const uint64_t newTimestamp = fetchAllDurableValue().asULL();
 
@@ -247,7 +252,6 @@ namespace mongo {
             // oplog read timestamp's documents are durable before publishing that timestamp.
             _durabilityManager->waitUntilDurable(opCtx.get(), false);
 
-            lk.lock();
             // Publish the new timestamp value.  Avoid going backward.
             auto oldTimestamp = getOplogReadTimestamp();
             if (newTimestamp > oldTimestamp) {
