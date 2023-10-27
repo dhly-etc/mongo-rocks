@@ -1061,12 +1061,13 @@ namespace mongo {
         if (_oplogVisibleTs && id.getLong() > *_oplogVisibleTs) {
             id = RecordId{*_oplogVisibleTs};
         }
+
         _needFirstSeek = false;
         _skipNextAdvance = false;
         _iterator.reset();
 
         int64_t storage;
-        auto key = _makeKey(start, _keyFormat, &storage);
+        auto key = _makeKey(id, _keyFormat, &storage);
         auto it =
             RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx)->NewIterator(_cf, _prefix, _isOplog);
 
