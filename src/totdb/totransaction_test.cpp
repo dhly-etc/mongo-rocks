@@ -34,6 +34,8 @@ namespace rocksdb {
         TOTransactionOptions txn_options;
 
         TOTransactionTest() {
+            TOTransaction::enableTimestampAll();
+
             options.create_if_missing = true;
             options.max_write_buffer_number = 2;
             options.comparator = &comparator_;

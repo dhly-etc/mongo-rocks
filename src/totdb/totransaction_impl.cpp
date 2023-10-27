@@ -28,8 +28,14 @@ namespace rocksdb {
 
     }  // namespace
 
+    bool timestampAll = false;
     std::set<std::string> TOTransaction::timestampPrefixes;
     std::mutex TOTransaction::prefixes_mutex;
+
+    void TOTransaction::enableTimestampAll() {
+        std::unique_lock<std::mutex> lk(prefixes_mutex);
+        timestampAll = true;
+    }
 
     void TOTransaction::enableTimestamp(const std::string& prefix) {
         std::unique_lock<std::mutex> lk(prefixes_mutex);
@@ -39,7 +45,7 @@ namespace rocksdb {
     bool TOTransaction::isEnableTimestamp(const Slice& key) {
         std::unique_lock<std::mutex> lk(prefixes_mutex);
         Slice prefix(key.data(), sizeof(uint32_t));
-        return timestampPrefixes.count(prefix.ToString()) > 0;
+        return timestampAll || timestampPrefixes.count(prefix.ToString()) > 0;
     }
 
     Status PrepareConflict() {

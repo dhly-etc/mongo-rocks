@@ -86,6 +86,7 @@ namespace rocksdb {
 
         virtual TOTransactionState GetState() const = 0;
 
+        static void enableTimestampAll();
         static void enableTimestamp(const std::string& prefix);
         static bool isEnableTimestamp(const Slice& key);
         static std::set<std::string> timestampPrefixes;
