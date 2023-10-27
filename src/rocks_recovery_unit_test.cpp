@@ -439,6 +439,7 @@ namespace mongo {
         ASSERT_TRUE(s.isOK());
         ASSERT_EQUALS(1, rs->numRecords(opCtx));
         ru->commitUnitOfWork();
+        opCtx->lockState()->endWriteUnitOfWork();
         RecordData rd;
         ASSERT_TRUE(rs->findRecord(opCtx, s.getValue(), &rd));
     }
@@ -452,6 +453,7 @@ namespace mongo {
         ASSERT_TRUE(s.isOK());
         ASSERT_EQUALS(1, rs->numRecords(opCtx));
         ru->abortUnitOfWork();
+        opCtx->lockState()->endWriteUnitOfWork();
         ASSERT_FALSE(rs->findRecord(opCtx, s.getValue(), nullptr));
     }
 
