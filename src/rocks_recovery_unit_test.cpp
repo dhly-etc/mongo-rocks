@@ -433,6 +433,7 @@ namespace mongo {
     TEST_F(RocksRecoveryUnitTestFixture, CommitUnitOfWork) {
         auto opCtx = clientAndCtx.second.get();
         const auto rs = harnessHelper->createRecordStore(opCtx, "table1");
+        opCtx->lockState()->beginWriteUnitOfWork();
         ru->beginUnitOfWork(opCtx->readOnly());
         StatusWith<RecordId> s = rs->insertRecord(opCtx, "data", 4, Timestamp());
         ASSERT_TRUE(s.isOK());
@@ -445,6 +446,7 @@ namespace mongo {
     TEST_F(RocksRecoveryUnitTestFixture, AbortUnitOfWork) {
         auto opCtx = clientAndCtx.second.get();
         const auto rs = harnessHelper->createRecordStore(opCtx, "table1");
+        opCtx->lockState()->beginWriteUnitOfWork();
         ru->beginUnitOfWork(opCtx->readOnly());
         StatusWith<RecordId> s = rs->insertRecord(opCtx, "data", 4, Timestamp());
         ASSERT_TRUE(s.isOK());
