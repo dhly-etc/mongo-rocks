@@ -177,7 +177,7 @@ namespace rocksdb {
 
     Status TOTransactionDB::Open(const Options& options,
                                  const TOTransactionDBOptions& txn_db_options,
-                                 const std::string& dbname, const std::string stable_ts_key,
+                                 const std::string& dbname, std::string stable_ts_key,
                                  TOTransactionDB** dbptr) {
         DBOptions db_options(options);
         ColumnFamilyOptions cf_options(options);
@@ -204,7 +204,7 @@ namespace rocksdb {
                                  const std::vector<ColumnFamilyDescriptor>& open_cfds,
                                  std::vector<ColumnFamilyHandle*>* handles,
                                  const std::vector<ColumnFamilyDescriptor>& trim_cfds,
-                                 const bool trimHistory, const std::string stable_ts_key,
+                                 bool trimHistory, std::string stable_ts_key,
                                  TOTransactionDB** dbptr) {
         Status s;
         for (const auto& cfd : open_cfds) {
@@ -399,7 +399,7 @@ namespace rocksdb {
 
             TOTxnOptions totxn_option;
             totxn_option.max_write_batch_size = txn_options.max_write_batch_size;
-            newActiveTxnNode = std::shared_ptr<ATN>(new ATN);
+            newActiveTxnNode = std::make_shared<ATN>();
             newTransaction =
                 new TOTransactionImpl(this, write_options, totxn_option, newActiveTxnNode);
 

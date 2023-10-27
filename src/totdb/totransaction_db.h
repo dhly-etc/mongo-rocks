@@ -122,7 +122,7 @@ namespace rocksdb {
 
         int CompareTimestamp(const Slice& ts1, const Slice& ts2) const override;
 
-        static const Slice StripTimestampFromUserKey(const Slice& user_key, size_t ts_sz) {
+        static Slice StripTimestampFromUserKey(const Slice& user_key, size_t ts_sz) {
             Slice ret = user_key;
             ret.remove_suffix(ts_sz);
             return ret;
@@ -155,16 +155,15 @@ namespace rocksdb {
     class TOTransactionDB : public StackableDB {
     public:
         static Status Open(const Options& options, const TOTransactionDBOptions& txn_db_options,
-                           const std::string& dbname, const std::string stableTsKey,
+                           const std::string& dbname, std::string stableTsKey,
                            TOTransactionDB** dbptr);
 
         static Status Open(const DBOptions& db_options,
                            const TOTransactionDBOptions& txn_db_options, const std::string& dbname,
                            const std::vector<ColumnFamilyDescriptor>& open_cfds,
                            std::vector<ColumnFamilyHandle*>* handles,
-                           const std::vector<ColumnFamilyDescriptor>& trim_cfds,
-                           const bool trimHistory, const std::string stableTsKey,
-                           TOTransactionDB** dbptr);
+                           const std::vector<ColumnFamilyDescriptor>& trim_cfds, bool trimHistory,
+                           std::string stableTsKey, TOTransactionDB** dbptr);
 
         virtual void SetMaxConflictBytes(uint64_t bytes) = 0;
 
