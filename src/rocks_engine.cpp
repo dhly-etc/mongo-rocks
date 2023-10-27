@@ -194,7 +194,7 @@ namespace mongo {
         LOGV2(0, "clusterRole", "role"_attr = serverGlobalParams.clusterRole);
 
         // used in building options for the db
-        _compactionScheduler.reset(new RocksCompactionScheduler());
+        _compactionScheduler = std::make_shared<RocksCompactionScheduler>();
 
         // Until the Replication layer installs a real callback, prevent truncating the oplog.
         setOldestActiveTransactionTimestampCallback(
@@ -678,6 +678,7 @@ namespace mongo {
         // _snapshotManager.dropAllSnapshots();
         _counterManager->sync();
         _counterManager.reset();
+        _compactionScheduler->stop();
         _compactionScheduler.reset();
         _defaultCf.reset();
         _oplogCf.reset();
@@ -1076,8 +1077,8 @@ namespace mongo {
                             "RocksEngine::RecoverToStableTimestamp shutting down rocksdb");
 
         // compactionScheduler should be create before initDatabase, because
-        // options.compactionFactor need compactionScheduler
-        _compactionScheduler.reset(new RocksCompactionScheduler());
+        // options.compaction_filter_factory need compactionScheduler
+        _compactionScheduler = std::make_shared<RocksCompactionScheduler>();
         LOGV2_DEBUG_OPTIONS(
             0, 0, logv2::LogOptions{logv2::LogComponent::kReplicationRollback},
             "RocksEngine::RecoverToStableTimestamp shutting down _compactionScheduler");

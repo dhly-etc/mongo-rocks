@@ -64,7 +64,7 @@ namespace mongo {
         uint64_t oplogCompactKeep;
     };
 
-    class RocksCompactionScheduler {
+    class RocksCompactionScheduler : public std::enable_shared_from_this<RocksCompactionScheduler> {
     public:
         RocksCompactionScheduler();
         ~RocksCompactionScheduler();

@@ -341,7 +341,7 @@ namespace mongo {
         // CounterManages manages counters like numRecords and dataSize for record stores
         std::unique_ptr<RocksCounterManager> _counterManager;
 
-        std::unique_ptr<RocksCompactionScheduler> _compactionScheduler;
+        std::shared_ptr<RocksCompactionScheduler> _compactionScheduler;
 
         // _defaultCf is rocksdb's "default" cf, it holds everything other than oplog
         // 1. user-collections, user-indexes

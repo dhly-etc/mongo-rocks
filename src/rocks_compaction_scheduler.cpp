@@ -69,8 +69,9 @@ namespace mongo {
 
         class OplogCompactionFilter : public rocksdb::CompactionFilter {
         public:
-            explicit OplogCompactionFilter(const std::string& from, const std::string& until,
-                                           RocksCompactionScheduler* compactionScheduler)
+            explicit OplogCompactionFilter(
+                const std::string& from, const std::string& until,
+                std::shared_ptr<RocksCompactionScheduler> compactionScheduler)
                 : _from(from), _until(until), _compactionScheduler(compactionScheduler) {}
 
             // filter is not called from multiple threads simultaneously
@@ -101,7 +102,7 @@ namespace mongo {
         private:
             const std::string _from;
             const std::string _until;
-            RocksCompactionScheduler* _compactionScheduler;
+            std::shared_ptr<RocksCompactionScheduler> _compactionScheduler;
         };
 
         class PrefixDeletingCompactionFilter : public rocksdb::CompactionFilter {
@@ -145,7 +146,8 @@ namespace mongo {
 
         class PrefixDeletingCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
         public:
-            explicit PrefixDeletingCompactionFilterFactory(RocksCompactionScheduler* scheduler)
+            explicit PrefixDeletingCompactionFilterFactory(
+                std::shared_ptr<RocksCompactionScheduler> scheduler)
                 : _compactionScheduler(scheduler) {}
 
             virtual std::unique_ptr<rocksdb::CompactionFilter> CreateCompactionFilter(
@@ -179,14 +181,14 @@ namespace mongo {
             }
 
         private:
-            RocksCompactionScheduler* _compactionScheduler;
+            std::shared_ptr<RocksCompactionScheduler> _compactionScheduler;
         };
     }  // namespace
 
     class CompactionBackgroundJob : public BackgroundJob {
     public:
         CompactionBackgroundJob(rocksdb::TOTransactionDB* db,
-                                RocksCompactionScheduler* compactionScheduler);
+                                std::shared_ptr<RocksCompactionScheduler> compactionScheduler);
         virtual ~CompactionBackgroundJob();
 
         // schedule compact range operation for execution in _compactionThread
@@ -214,8 +216,8 @@ namespace mongo {
 
         void compact(const CompactOp& op);
 
-        rocksdb::TOTransactionDB* _db;                   // not owned
-        RocksCompactionScheduler* _compactionScheduler;  // not owned
+        rocksdb::TOTransactionDB* _db;  // not owned
+        std::shared_ptr<RocksCompactionScheduler> _compactionScheduler;
 
         bool _compactionThreadRunning = true;
         Mutex _compactionMutex = MONGO_MAKE_LATCH("CompactionBackgroundJob::_compactionMutex");
@@ -227,8 +229,8 @@ namespace mongo {
 
     const char* const CompactionBackgroundJob::_name = "RocksCompactionThread";
 
-    CompactionBackgroundJob::CompactionBackgroundJob(rocksdb::TOTransactionDB* db,
-                                                     RocksCompactionScheduler* compactionScheduler)
+    CompactionBackgroundJob::CompactionBackgroundJob(
+        rocksdb::TOTransactionDB* db, std::shared_ptr<RocksCompactionScheduler> compactionScheduler)
         : _db(db), _compactionScheduler(compactionScheduler) {
         go();
     }
@@ -457,7 +459,7 @@ namespace mongo {
         _db = db;
         _metaCf = cf;
         _timer.reset();
-        _compactionJob.reset(new CompactionBackgroundJob(db, this));
+        _compactionJob.reset(new CompactionBackgroundJob(db, shared_from_this()));
     }
 
     void RocksCompactionScheduler::stop() { _compactionJob.reset(); }
@@ -534,7 +536,7 @@ namespace mongo {
     }
 
     rocksdb::CompactionFilterFactory* RocksCompactionScheduler::createCompactionFilterFactory() {
-        return new PrefixDeletingCompactionFilterFactory(this);
+        return new PrefixDeletingCompactionFilterFactory(shared_from_this());
     }
 
     std::unordered_map<uint32_t, BSONObj> RocksCompactionScheduler::getDroppedPrefixes() const {
