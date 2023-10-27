@@ -82,9 +82,12 @@ namespace mongo {
             : _dbpath("rocks_test"),
               _engine(_dbpath.path(), true /* durable */, 3 /* kRocksFormatVersion */,
                       false /* readOnly */) {
-            repl::ReplicationCoordinator::set(serviceContext(),
-                                              std::make_unique<repl::ReplicationCoordinatorMock>(
-                                                  serviceContext(), repl::ReplSettings()));
+            repl::ReplicationCoordinator::set(
+                serviceContext(),
+                options == Options::ReplicationEnabled
+                    ? std::make_unique<repl::ReplicationCoordinatorMock>(serviceContext())
+                    : std::make_unique<repl::ReplicationCoordinatorMock>(serviceContext(),
+                                                                         repl::ReplSettings()));
         }
 
         virtual ~RocksHarnessHelper() {}
