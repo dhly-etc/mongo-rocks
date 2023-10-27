@@ -1068,43 +1068,43 @@ namespace mongo {
 
         int64_t storage;
         auto key = _makeKey(id, _keyFormat, &storage);
-        auto it =
-            RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx)->NewIterator(_cf, _prefix, _isOplog);
+        _iterator.reset(
+            RocksRecoveryUnit::getRocksRecoveryUnit(_opCtx)->NewIterator(_cf, _prefix, _isOplog));
 
         auto status = rocksPrepareConflictRetry(_opCtx, [&] {
             if (_forward) {
-                it->SeekForPrev(key);
+                _iterator->SeekForPrev(key);
             } else {
-                it->Seek(key);
+                _iterator->Seek(key);
             }
-            return it->status();
+            return _iterator->status();
         });
 
-        if (!it->Valid()) {
+        if (!_iterator->Valid()) {
             status = rocksPrepareConflictRetry(_opCtx, [&] {
                 if (_forward) {
-                    it->Seek(key);
+                    _iterator->Seek(key);
                 } else {
-                    it->SeekForPrev(key);
+                    _iterator->SeekForPrev(key);
                 }
-                return it->status();
+                return _iterator->status();
             });
         } else {
             invariantRocksOK(status);
         }
 
-        if (!it->Valid()) {
+        if (!_iterator->Valid()) {
             _eof = true;
             return {};
         }
 
-        invariant(it->Valid());
+        invariant(_iterator->Valid());
         invariantRocksOK(status);
 
         _eof = false;
-        _lastLoc = RocksRecordStore::_makeRecordId(it->key(), _keyFormat);
+        _lastLoc = RocksRecordStore::_makeRecordId(_iterator->key(), _keyFormat);
 
-        auto value = it->value();
+        auto value = _iterator->value();
         return {{_lastLoc, {value.data(), static_cast<int>(value.size())}}};
     }
 
