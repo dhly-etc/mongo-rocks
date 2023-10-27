@@ -357,7 +357,7 @@ namespace rocksdb {
                   static_cast<size_t>(GetWriteBatch()->GetWriteBatch()->Count()));
         if (core_->commit_ts_set_) {
             for (size_t i = 0; i < asof_commit_timestamps_.size(); ++i) {
-                if (asof_commit_timestamps_[i] == 0) {
+                if (asof_commit_timestamps_[i] == none_ts) {
                     asof_commit_timestamps_[i] = core_->commit_ts_;
                 }
             }
