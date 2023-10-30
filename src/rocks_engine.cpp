@@ -106,8 +106,8 @@ namespace mongo {
 
             while (!_shuttingDown.load()) {
                 try {
-                    auto opCtx = tc->getOperationContext();
-                    _durabilityManager->waitUntilDurable(opCtx, false);
+                    auto opCtx = tc->makeOperationContext();
+                    _durabilityManager->waitUntilDurable(opCtx.get(), false);
                 } catch (const AssertionException& e) {
                     invariant(e.code() == ErrorCodes::ShutdownInProgress);
                 }
@@ -167,7 +167,8 @@ namespace mongo {
           _maxPrefix(0),
           _keepDataHistory(serverGlobalParams.enableMajorityReadConcern),
           _stableTimestamp(0),
-          _initialDataTimestamp(0) {
+          _initialDataTimestamp(0),
+          _pinnedOplogTimestamp(Timestamp::max().asULL()) {
         {  // create block cache
             uint64_t cacheSizeGB = rocksGlobalOptions.cacheSizeGB;
             if (cacheSizeGB == 0) {
@@ -723,8 +724,48 @@ namespace mongo {
     }
 
     void RocksEngine::setPinnedOplogTimestamp(const Timestamp& pinnedTimestamp) {
+        _pinnedOplogTimestamp.store(pinnedTimestamp.asULL());
+    }
+
+    Timestamp RocksEngine::getPinnedOplog() const {
+        // The storage engine may have been told to keep oplog back to a certain timestamp.
+        Timestamp pinned = Timestamp(_pinnedOplogTimestamp.load());
+
+        if (getLastStableRecoveryTimestamp()) {
+            pinned = std::min(*getLastStableRecoveryTimestamp(), pinned);
+        }
+
         // TODO
-        MONGO_UNIMPLEMENTED;
+        /*{
+            stdx::lock_guard<Latch> lock(_oplogPinnedByBackupMutex);
+            if (!storageGlobalParams.allowOplogTruncation) {
+                // If oplog truncation is not allowed, then return the min timestamp so that no
+        history
+                // is ever allowed to be deleted.
+                return Timestamp::min();
+            }
+            if (_oplogPinnedByBackup) {
+                // All the oplog since `_oplogPinnedByBackup` should remain intact during the
+        backup. return std::min(_oplogPinnedByBackup.value(), pinned);
+            }
+        }*/
+
+        auto oplogNeededForCrashRecovery = getOplogNeededForCrashRecovery();
+
+        if (oplogNeededForCrashRecovery) {
+            return std::min(oplogNeededForCrashRecovery.value(), pinned);
+        }
+
+        return pinned;
+
+        // TODO
+        /*auto status = getOplogNeededForRollback();
+        if (status.isOK()) {
+            return std::min(status.getValue(), pinned);
+        }
+
+        // If getOplogNeededForRollback fails, don't truncate any oplog right now.
+        return Timestamp::min();*/
     }
 
     void RocksEngine::dump() const {

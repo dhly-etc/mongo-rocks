@@ -307,9 +307,7 @@ namespace mongo {
     }
 
     void RocksRecordStore::reclaimOplog(OperationContext* opCtx) {
-        auto persistedTimestamp = _engine->getLastStableRecoveryTimestamp()
-                                      ? *_engine->getLastStableRecoveryTimestamp()
-                                      : Timestamp::min();
+        auto persistedTimestamp = _engine->getPinnedOplog();
         std::vector<rocksdb::LiveFileMetaData> allFiles, oplogFiles, pendingDelFiles;
         ssize_t oplogTotalBytes = 0, pendingDelSize = 0;
         std::string maxDelKey;

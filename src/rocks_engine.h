@@ -275,6 +275,8 @@ namespace mongo {
             return NamespaceString::oplog(ns) ? getOplogCf_ForTest() : getDefaultCf_ForTest();
         }
 
+        Timestamp getPinnedOplog() const;
+
     private:
         Status _createIdent(StringData ident, BSONObjBuilder* configBuilder);
         BSONObj _getIdentConfig(StringData ident);
@@ -370,6 +372,7 @@ namespace mongo {
         AtomicWord<std::uint64_t> _stableTimestamp;
         AtomicWord<std::uint64_t> _initialDataTimestamp;
         AtomicWord<std::uint64_t> _lastStableCheckpointTimestamp;
+        AtomicWord<std::uint64_t> _pinnedOplogTimestamp;
         Timestamp _recoveryTimestamp;
     };
 }  // namespace mongo
